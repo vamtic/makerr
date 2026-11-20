@@ -1,0 +1,343 @@
+name: CI
+
+on:
+  push:
+    branches: [ "master" ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - 'SECURITY.md'
+      - '.github/ISSUE_TEMPLATE/**'
+  pull_request:
+    branches: [ "master" ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - 'SECURITY.md'
+      - '.github/ISSUE_TEMPLATE/**'
+  workflow_dispatch:
+
+# Superseded runs (e.g. a new push to the same PR) are cancelled automatically.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Only the packaging job needs to write (release uploads).
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # CI never benefits from incremental compilation and full debuginfo is what
+  # made the cached target/ contents (and the cache save/restore) huge.
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  CARGO_PROFILE_TEST_DEBUG: line-tables-only
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@1.100.0
+      with:
+        components: rustfmt
+
+    - name: Format check
+      run: cargo fmt --all -- --check
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@1.100.0
+      with:
+        components: clippy
+
+    # Linting is platform independent, so it runs on Linux only: a second
+    # `cargo clippy --all-targets` on Windows cost ~5m30s per run. Windows
+    # still type-checks every cfg(windows) path via the `check` job below.
+    - name: Rust cache
+      uses: swatinem/rust-cache@v2
+      with:
+        shared-key: rust-ubuntu-latest
+        # PRs restore the master cache but never write one: branch-scoped
+        # caches otherwise evict the master entries under the 10 GB limit.
+        save-if: ${{ github.ref == 'refs/heads/master' }}
+        cache-on-failure: true
+
+    - name: Install system dependencies (Linux)
+      uses: awalsh128/cache-apt-pkgs-action@v1
+      with:
+        packages: libxkbcommon-dev libxkbcommon-x11-dev libgl1-mesa-dev libegl1-mesa-dev libwayland-dev libfontconfig1-dev
+        version: 1.0
+
+    # `--exclude image` skips the vendored image_parity copy (an auto workspace
+    # member), which would otherwise be linted in full on every run.
+    - name: Lint
+      run: cargo clippy --workspace --exclude image --all-targets --locked
+
+  # Windows compile validation. PRs need it because clippy runs on Linux only,
+  # which never compiles the `cfg(windows)` paths; on master it also keeps the
+  # Windows cache warm for the PR runs (`save-if` below).
+  check:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@1.100.0
+
+    - name: Rust cache
+      uses: swatinem/rust-cache@v2
+      with:
+        shared-key: rust-windows-latest
+        save-if: ${{ github.ref == 'refs/heads/master' }}
+        cache-on-failure: true
+
+    # `--exclude image` skips the vendored `image_parity` copy in
+    # crates/tlm-core/vendor/image_parity: a byte-identical copy of the exact
+    # `image` version used here, with only its private `Blend` trait / `color`
+    # module made public so blend_parity.rs can compare blends. It is a path
+    # dependency of a member, and Cargo always treats those as workspace
+    # members, so `exclude` in Cargo.toml cannot drop it -- every command
+    # passes `--exclude image` instead. Keep it in sync when bumping `image`.
+    - name: Check
+      run: cargo check --workspace --exclude image --all-targets --locked
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@1.100.0
+
+    - name: Rust cache
+      uses: swatinem/rust-cache@v2
+      with:
+        shared-key: rust-ubuntu-latest
+        save-if: ${{ github.ref == 'refs/heads/master' }}
+        cache-on-failure: true
+
+    - name: Install system dependencies (Linux)
+      uses: awalsh128/cache-apt-pkgs-action@v1
+      with:
+        packages: libxkbcommon-dev libxkbcommon-x11-dev libgl1-mesa-dev libegl1-mesa-dev libwayland-dev libfontconfig1-dev
+        version: 1.0
+
+    - name: Test
+      run: cargo test --workspace --exclude image --locked
+
+  # Release artifacts are only built for pushes to master. This job has no
+  # `needs`, so the (expensive) build runs in parallel with the checks instead
+  # of after them; the separate `publish` job below is what waits for
+  # everything to pass.
+  package:
+    if: github.event_name == 'push'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@1.100.0
+
+    # A separate key from the `check` job: that one holds debug artifacts,
+    # this one holds the release build (the expensive part to redo).
+    - name: Rust cache
+      uses: swatinem/rust-cache@v2
+      with:
+        shared-key: rust-release-${{ matrix.os }}
+        cache-on-failure: true
+
+    - name: Install system dependencies (Linux)
+      if: runner.os == 'Linux'
+      uses: awalsh128/cache-apt-pkgs-action@v1
+      with:
+        packages: libxkbcommon-dev libxkbcommon-x11-dev libgl1-mesa-dev libegl1-mesa-dev libwayland-dev libfontconfig1-dev
+        version: 1.0
+
+    - name: Build
+      run: cargo build --release --workspace --exclude image --locked
+
+    - name: Download ffmpeg (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        # Pinned instead of the rolling `ffmpeg-release-essentials.zip` so the
+        # shipped binary does not change silently between releases.
+        # Bump version + checksum together; get the hash from
+        # https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-<version>-essentials_build.zip.sha256
+        FFMPEG_VERSION: "9.0.2"
+        FFMPEG_SHA256: "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba"
+      run: |
+        New-Item -ItemType Directory -Force -Path stage
+        $url = "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-" + $env:FFMPEG_VERSION + "-essentials_build.zip"
+        $downloaded = $false
+        for ($i = 1; $i -le 5; $i++) {
+          try {
+            Write-Host "Downloading ffmpeg from $url (attempt $i/5)..."
+            Invoke-WebRequest -Uri $url -OutFile ffmpeg.zip -TimeoutSec 120
+            $downloaded = $true
+            break
+          } catch {
+            Write-Warning "Download attempt $i failed: $_"
+            if ($i -lt 5) { Start-Sleep -Seconds ($i * 10) }
+          }
+        }
+        if (-not $downloaded) { throw "Failed to download ffmpeg after 5 attempts." }
+        $actual = (Get-FileHash ffmpeg.zip -Algorithm SHA256).Hash.ToLower()
+        if ($actual -ne $env:FFMPEG_SHA256) { throw "ffmpeg checksum mismatch: got $actual" }
+        Expand-Archive -Path ffmpeg.zip -DestinationPath ffmpeg_temp
+        Get-ChildItem -Path ffmpeg_temp -Recurse -Filter ffmpeg.exe | Select-Object -First 1 | Move-Item -Destination stage/ffmpeg.exe
+        Remove-Item -Recurse -Force ffmpeg_temp, ffmpeg.zip
+
+    - name: Package Windows portable zip
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        mkdir -p stage dist stage/LICENSES
+        cp target/release/timelapse.exe stage/
+        cp assets/timelapsemaker.ico stage/timelapsemaker.ico
+        cp LICENSE stage/
+        cp THIRD_PARTY_NOTICES.md stage/
+        cp LICENSES/Slint-Royalty-free-2.0.md stage/LICENSES/
+        cd stage
+        7z a -tzip ../dist/TimelapseMaker-windows-portable.zip timelapse.exe ffmpeg.exe timelapsemaker.ico LICENSE THIRD_PARTY_NOTICES.md LICENSES
+
+    - name: Create Windows installer (Inno Setup)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $version = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+        choco install innosetup --yes --no-progress
+        $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+        if (-not (Test-Path $iscc)) {
+          $iscc = "C:\Program Files\Inno Setup 6\ISCC.exe"
+        }
+        @"
+        #define MyAppName "TimelapseMaker"
+        #define MyAppVersion "$version"
+        #define MyAppExeName "timelapse.exe"
+
+        [Setup]
+        AppName={#MyAppName}
+        AppVersion={#MyAppVersion}
+        DefaultDirName={autopf}\{#MyAppName}
+        DefaultGroupName={#MyAppName}
+        OutputBaseFilename=TimelapseMaker-Setup
+        OutputDir=dist
+        Compression=lzma2
+        SolidCompression=yes
+        ArchitecturesInstallIn64BitMode=x64
+        SetupIconFile=stage\timelapsemaker.ico
+
+        [Files]
+        Source: "stage\timelapse.exe"; DestDir: "{app}"; Flags: ignoreversion
+        Source: "stage\ffmpeg.exe"; DestDir: "{app}"; Flags: ignoreversion
+        Source: "stage\timelapsemaker.ico"; DestDir: "{app}"; Flags: ignoreversion
+        Source: "stage\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+        Source: "stage\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
+        Source: "stage\LICENSES\*"; DestDir: "{app}\LICENSES"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+        [Icons]
+        Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\timelapsemaker.ico"
+        Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\timelapsemaker.ico"
+
+        [Run]
+        Filename: "{app}\{#MyAppExeName}"; Description: "Launch application"; Flags: nowait postinstall skipifsilent
+        "@ | Out-File -FilePath installer.iss -Encoding ASCII
+        & $iscc installer.iss
+
+    - name: Package Linux binaries
+      if: runner.os == 'Linux'
+      run: |
+        mkdir -p stage dist stage/LICENSES
+        cp target/release/timelapse stage/
+        cp README.md stage/
+        cp LICENSE stage/
+        cp THIRD_PARTY_NOTICES.md stage/
+        cp LICENSES/Slint-Royalty-free-2.0.md stage/LICENSES/
+        tar -czf dist/TimelapseMaker-linux-x86_64.tar.gz -C stage timelapse README.md LICENSE THIRD_PARTY_NOTICES.md LICENSES
+        (cd stage && zip -r ../dist/TimelapseMaker-linux-x86_64.zip timelapse README.md LICENSE THIRD_PARTY_NOTICES.md LICENSES)
+
+    - name: Upload packaged artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: dist-${{ runner.os }}
+        # `error`, not `ignore`: a misnamed output silently shipped a release
+        # with a missing asset once already.
+        if-no-files-found: error
+        path: dist/*
+
+  # Publishing is the only step that needs `contents: write`, and it is gated
+  # on every check plus the packaging matrix, so a red build never overwrites
+  # the `latest` release.
+  publish:
+    if: github.event_name == 'push'
+    needs: [fmt, lint, check, test, package]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Read workspace version
+      id: version
+      run: |
+        version=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+        echo "value=$version" >> "$GITHUB_OUTPUT"
+
+    - name: Download packaged artifacts
+      uses: actions/download-artifact@v8
+      with:
+        path: dist
+        merge-multiple: true
+
+    # The website maps these exact filenames to its download buttons, so a
+    # rename or a missing platform must fail before the release is replaced.
+    - name: Verify release assets
+      run: |
+        for asset in \
+          TimelapseMaker-linux-x86_64.tar.gz \
+          TimelapseMaker-linux-x86_64.zip \
+          TimelapseMaker-Setup.exe \
+          TimelapseMaker-windows-portable.zip
+        do
+          test -f "dist/$asset" || { echo "::error::missing dist/$asset"; exit 1; }
+        done
+
+    - name: Generate checksums
+      working-directory: dist
+      run: sha256sum TimelapseMaker-* > SHA256SUMS
+
+    - name: Update GitHub Release
+      uses: softprops/action-gh-release@v3
+      with:
+        tag_name: "latest"
+        name: "TimelapseMaker V${{ steps.version.outputs.value }}"
+        draft: false
+        prerelease: false
+        files: dist/*

@@ -1,0 +1,37 @@
+[package]
+name = "tlm-app"
+description = "TimelapseMaker: pixel-art canvas history to timelapse video (CLI + Slint GUI)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "timelapse"
+path = "src/main.rs"
+
+[dependencies]
+tlm-core.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+clap.workspace = true
+chrono.workspace = true
+serde_json.workspace = true
+slint = "1.18"
+rfd = "0.18"
+open.workspace = true
+arboard = "3"
+image.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_SystemInformation",
+] }
+
+[build-dependencies]
+slint-build = "1.18"

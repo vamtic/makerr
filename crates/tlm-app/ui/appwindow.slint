@@ -1,0 +1,3601 @@
+import { ScrollView, ComboBox, LineEdit, SpinBox, Palette, AboutSlint } from "std-widgets.slint";
+
+export struct LogItem {
+    level: int,
+    message: string,
+}
+
+// ----------------------------------------------------------------------------
+// Design tokens ("Refined Dark Studio")
+// ----------------------------------------------------------------------------
+export global Theme {
+    in-out property <color> bg: #070b12;
+    in-out property <color> card: #0f1726f2;
+    in-out property <color> card-hover: #142033f5;
+    in-out property <color> input: #0a1120;
+    in-out property <color> track: #1a2a3f;
+    in-out property <color> border: #223047cc;
+    in-out property <color> border-strong: #2d405c;
+    in-out property <color> text: #f8fafc;
+    in-out property <color> text2: #cbd5e1;
+    in-out property <color> text3: #9aa9bd;
+    in-out property <color> accent: #00e6a0;
+    in-out property <color> hover: #00b37e;
+    in-out property <color> success: #34d399;
+    in-out property <color> warn: #fbbf24;
+    in-out property <color> danger: #f87171;
+    in-out property <color> violet: #a78bfa;
+    in-out property <length> radius: 8px;
+    in-out property <length> radius-lg: 12px;
+
+    // Derived from `accent` so every themed surface follows the Appearance
+    // setting instead of hard-coded blues.
+    out property <color> on-accent: #03110c;
+    out property <color> accent-text: accent.mix(#ffffff, 0.72);
+    out property <color> accent-border: accent.mix(#ffffff, 0.85);
+    out property <color> warn-soft: warn.mix(#000000, 0.82);
+    out property <color> accent-soft-border: accent.mix(#0b1220, 0.6);
+    out property <color> accent-soft: accent.mix(#0b1220, 0.25);
+    out property <color> accent-faint: accent.mix(#0b1220, 0.12);
+    out property <color> accent-pressed: accent.mix(#000000, 0.75);
+}
+
+// ----------------------------------------------------------------------------
+// Icon assets (SVG, tinted at the use site via `colorize`)
+// ----------------------------------------------------------------------------
+export global Icons {
+    out property <image> play: @image-url("icons/play.svg");
+    out property <image> film: @image-url("icons/film.svg");
+    out property <image> download: @image-url("icons/download.svg");
+    out property <image> upload: @image-url("icons/upload.svg");
+    out property <image> settings: @image-url("icons/settings.svg");
+    out property <image> folder: @image-url("icons/folder.svg");
+    out property <image> close: @image-url("icons/close.svg");
+    out property <image> chevron-down: @image-url("icons/chevron-down.svg");
+    out property <image> chevron-right: @image-url("icons/chevron-right.svg");
+    out property <image> chevron-left: @image-url("icons/chevron-left.svg");
+    out property <image> check: @image-url("icons/check.svg");
+    out property <image> plus: @image-url("icons/plus.svg");
+    out property <image> minus: @image-url("icons/minus.svg");
+    out property <image> terminal: @image-url("icons/terminal.svg");
+    out property <image> trash: @image-url("icons/trash.svg");
+    out property <image> copy: @image-url("icons/copy.svg");
+    out property <image> alert: @image-url("icons/alert.svg");
+    out property <image> info: @image-url("icons/info.svg");
+    out property <image> calendar: @image-url("icons/calendar.svg");
+    out property <image> map-pin: @image-url("icons/map-pin.svg");
+    out property <image> image: @image-url("icons/image.svg");
+    out property <image> sliders: @image-url("icons/sliders.svg");
+    out property <image> palette: @image-url("icons/palette.svg");
+    out property <image> server: @image-url("icons/server.svg");
+    out property <image> globe: @image-url("icons/globe.svg");
+    out property <image> eye: @image-url("icons/eye.svg");
+    out property <image> fullscreen: @image-url("icons/fullscreen.svg");
+    out property <image> help: @image-url("icons/help.svg");
+}
+
+// ----------------------------------------------------------------------------
+// Reusable primitives
+// ----------------------------------------------------------------------------
+
+component Icon inherits Image {
+    in property <length> icon-size: 16px;
+    in property <color> tint: Theme.text2;
+    source: Icons.info;
+    width: root.icon-size;
+    height: root.icon-size;
+    colorize: root.tint;
+    image-fit: contain;
+}
+
+// Three-tier button: primary (accent), secondary (subtle fill), danger.
+component ActionButton inherits Rectangle {
+    in property <string> label: "";
+    in property <image> icon;
+    in property <bool> show-icon: false;
+    in property <bool> primary: false;
+    in property <bool> danger: false;
+    in property <bool> interactive: true;
+    // Set while a modal dialog is open so Tab navigation cannot escape into
+    // the dimmed background UI.
+    in property <bool> inert: false;
+    in property <length> control-height: 34px;
+    callback activated();
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { if (root.interactive) { root.activated(); } }
+
+    height: Math.max(root.control-height, 1.2rem + 20px);
+    opacity: root.interactive ? 1.0 : 0.62;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: !root.interactive ? Theme.border
+        : root.primary ? Theme.accent-border
+        : root.danger ? #ef444499
+        : Theme.border-strong;
+    background: !root.interactive ? Theme.input
+        : root.primary ? (ta.pressed ? Theme.accent-pressed : (ta.has-hover
+            ? @linear-gradient(135deg, Theme.accent.mix(#000000, 0.85) 0%, Theme.accent.mix(#000000, 0.55) 100%)
+            : @linear-gradient(135deg, Theme.accent 0%, Theme.accent.mix(#000000, 0.75) 62%, Theme.accent.mix(#000000, 0.5) 100%)))
+        : root.danger ? (ta.pressed ? #7f1d1d : (ta.has-hover ? #4c1d24 : #341521))
+        : (ta.pressed ? #0b1424 : (ta.has-hover ? Theme.card-hover : Theme.input));
+
+    ta := TouchArea {
+        enabled: root.interactive;
+        clicked => { fs.focus(); root.activated(); }
+    }
+
+    fs := FocusScope {
+        focus-on-click: false;
+        enabled: root.interactive;
+        focus-on-tab-navigation: !root.inert;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.activated();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 11px;
+        padding-right: 11px;
+        alignment: center;
+        spacing: 7px;
+        if root.show-icon : Icon {
+            source: root.icon;
+            icon-size: 15px;
+            y: (parent.height - self.height) / 2;
+            tint: !root.interactive ? Theme.text3 : root.primary ? Theme.on-accent : root.danger ? #fecdd3 : Theme.text2;
+        }
+        if root.label != "" : Text {
+            text: root.label;
+            color: !root.interactive ? Theme.text3 : root.primary ? Theme.on-accent : root.danger ? #fecdd3 : Theme.text;
+            font-size: 0.9375rem;
+            font-weight: root.primary ? 700 : 600;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    if fs.has-focus && root.interactive : Rectangle {
+        border-width: 1px;
+        border-radius: Theme.radius;
+        border-color: Theme.accent;
+    }
+}
+
+// Small square icon button used for zoom, steppers and toolbar actions.
+component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label: "";
+    in property <bool> interactive: true;
+    in property <bool> inert: false;
+    in property <bool> selected: false;
+    in property <length> button-size: 28px;
+    callback activated();
+
+    accessible-role: button;
+    accessible-label: root.label;
+
+    width: Math.max(root.button-size, 1.4rem);
+    height: Math.max(root.button-size, 1.4rem);
+    border-radius: 6px;
+    border-width: root.selected ? 1px : 0px;
+    border-color: root.selected ? Theme.accent-soft-border : transparent;
+    background: !root.interactive ? transparent
+        : root.selected ? Theme.accent-soft
+        : (ta.has-hover ? Theme.card-hover : transparent);
+
+    ta := TouchArea {
+        enabled: root.interactive;
+        clicked => { fs.focus(); root.activated(); }
+    }
+
+    fs := FocusScope {
+        focus-on-click: false;
+        enabled: root.interactive;
+        focus-on-tab-navigation: !root.inert;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.activated();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    Icon {
+        source: root.icon;
+        icon-size: 15px;
+        tint: !root.interactive ? Theme.text3
+            : (ta.has-hover || root.selected ? Theme.accent : Theme.text3);
+    }
+
+    if root.label != "" : Tooltip {
+        Text { text: root.label; }
+    }
+
+    if fs.has-focus && root.interactive : Rectangle {
+        border-width: 1px;
+        border-radius: 6px;
+        border-color: Theme.accent;
+    }
+}
+
+// Compact pill button (date presets, console filters).
+component Chip inherits Rectangle {
+    in property <string> label: "";
+    in property <image> icon;
+    in property <bool> show-icon: false;
+    in property <bool> active: false;
+    in property <bool> interactive: true;
+    in property <bool> inert: false;
+    callback activated();
+
+    accessible-role: button;
+    accessible-label: root.label;
+
+    height: Math.max(26px, 1.1rem + 12px);
+    border-radius: 13px;
+    border-width: 1px;
+    border-color: !root.interactive ? Theme.border
+        : root.active ? Theme.accent-soft-border
+        : (ta.has-hover ? Theme.border-strong : Theme.border);
+    background: !root.interactive ? Theme.input
+        : root.active ? Theme.accent-soft
+        : (ta.has-hover ? Theme.card-hover : Theme.input);
+
+    ta := TouchArea {
+        enabled: root.interactive;
+        clicked => { fs.focus(); root.activated(); }
+    }
+
+    fs := FocusScope {
+        focus-on-click: false;
+        enabled: root.interactive;
+        focus-on-tab-navigation: !root.inert;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.activated();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        alignment: center;
+        spacing: 5px;
+        if root.show-icon : Icon {
+            source: root.icon;
+            icon-size: 12px;
+            y: (parent.height - self.height) / 2;
+            tint: root.active ? Theme.accent : Theme.text3;
+        }
+        Text {
+            text: root.label;
+            color: root.active ? Theme.accent-text : Theme.text2;
+            font-size: 0.875rem;
+            font-weight: root.active ? 700 : 500;
+            vertical-alignment: center;
+        }
+    }
+
+    if fs.has-focus && root.interactive : Rectangle {
+        border-width: 1px;
+        border-radius: 13px;
+        border-color: Theme.accent;
+    }
+}
+
+// Settings navigation entry (vertical tab).
+component NavItem inherits Rectangle {
+    in property <string> label: "";
+    in property <image> icon;
+    in property <bool> active: false;
+    callback activated();
+
+    accessible-role: tab;
+    accessible-label: root.label;
+    accessible-checked: root.active;
+
+    height: 40px;
+    border-radius: 8px;
+    background: root.active ? Theme.accent-soft
+        : (ta.has-hover ? Theme.card-hover : transparent);
+
+    ta := TouchArea {
+        clicked => { fs.focus(); root.activated(); }
+    }
+
+    fs := FocusScope {
+        focus-on-click: false;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.activated();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 9px;
+        padding-right: 10px;
+        spacing: 9px;
+        alignment: center;
+        Rectangle {
+            width: 3px;
+            height: 17px;
+            border-radius: 2px;
+            background: root.active ? Theme.accent : transparent;
+            y: (parent.height - self.height) / 2;
+        }
+        Icon {
+            source: root.icon;
+            icon-size: 16px;
+            tint: root.active ? Theme.accent : Theme.text3;
+            y: (parent.height - self.height) / 2;
+        }
+        Text {
+            text: root.label;
+            color: root.active ? Theme.text : Theme.text2;
+            font-size: 0.9375rem;
+            font-weight: root.active ? 700 : 500;
+            vertical-stretch: 1;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+
+    if fs.has-focus : Rectangle {
+        border-width: 1px;
+        border-radius: 8px;
+        border-color: Theme.accent;
+    }
+}
+
+// Card surface with a left accent pill and optional metadata.
+component Card inherits Rectangle {
+    in property <string> title: "";
+    in property <string> meta: "";
+    in property <int> step: 0;
+    in property <color> accent: Theme.accent;
+
+    border-radius: Theme.radius-lg;
+    background: Theme.card;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    VerticalLayout {
+        padding: 11px;
+        spacing: 8px;
+
+        if root.title != "" : Rectangle {
+            background: transparent;
+            HorizontalLayout {
+                spacing: 8px;
+                if root.step > 0 : Rectangle {
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 11px;
+                    background: Theme.accent-soft;
+                    border-width: 1px;
+                    border-color: Theme.accent-soft-border;
+                    y: (parent.height - self.height) / 2;
+                    Text {
+                        text: root.step == 1 ? "1" : root.step == 2 ? "2" : root.step == 3 ? "3" : "4";
+                        color: Theme.accent;
+                        font-size: 0.8125rem;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                if root.step == 0 : Rectangle {
+                    width: 3px;
+                    height: 14px;
+                    border-radius: 2px;
+                    background: root.accent;
+                    y: (parent.height - self.height) / 2;
+                }
+                Text {
+                    text: root.title;
+                    color: Theme.text;
+                    font-size: 1.0625rem;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                if root.meta == "" : Rectangle { horizontal-stretch: 1; }
+                if root.meta != "" : Text {
+                    text: root.meta;
+                    color: Theme.text3;
+                    font-size: 0.875rem;
+                    horizontal-stretch: 1;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        VerticalLayout {
+            spacing: 8px;
+            @children
+        }
+    }
+}
+
+// Labelled text input with inline validation styling.
+component FormField inherits VerticalLayout {
+    in property <string> label: "";
+    in property <string> placeholder: "";
+    in property <string> error: "";
+    in-out property <string> value: "";
+    in property <bool> interactive: true;
+    callback edited(string);
+
+    spacing: 5px;
+
+    if root.label != "" : Text {
+        text: root.label;
+        color: Theme.text2;
+        font-size: 0.9375rem;
+        font-weight: 500;
+        overflow: elide;
+    }
+
+    Rectangle {
+        height: Math.max(34px, 1.2rem + 20px);
+        border-radius: 6px;
+        border-width: (root.error != "" || field.has-focus) ? 1px : 0px;
+        border-color: root.error != "" ? Theme.danger : Theme.accent;
+        background: transparent;
+
+        field := LineEdit {
+            text <=> root.value;
+            placeholder-text: root.placeholder;
+            enabled: root.interactive;
+            edited(t) => { root.edited(t); }
+        }
+
+        if root.error != "" || field.has-focus : Rectangle {
+            width: 100%;
+            height: 100%;
+            border-width: 1px;
+            border-radius: 6px;
+            border-color: root.error != "" ? Theme.danger : Theme.accent;
+            background: transparent;
+        }
+    }
+
+    if root.error != "" : Text {
+        text: root.error;
+        color: Theme.danger;
+        font-size: 0.875rem;
+        wrap: word-wrap;
+    }
+}
+
+// Text input paired with a browse action (folders, audio files).
+component FileField inherits VerticalLayout {
+    in property <string> label: "";
+    in property <string> placeholder: "";
+    in property <string> error: "";
+    in property <string> button-label: "Browse";
+    in property <string> clear-label: "Clear";
+    in property <bool> interactive: true;
+    in-out property <string> value: "";
+    callback edited(string);
+    callback browse();
+
+    spacing: 5px;
+
+    if root.label != "" : Text {
+        text: root.label;
+        color: Theme.text2;
+        font-size: 0.9375rem;
+        font-weight: 500;
+        overflow: elide;
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+
+        Rectangle {
+            horizontal-stretch: 1;
+            height: Math.max(40px, 1.2rem + 24px);
+            border-radius: 6px;
+            border-width: (root.error != "" || field.has-focus) ? 1px : 0px;
+            border-color: root.error != "" ? Theme.danger : Theme.accent;
+            background: Theme.input;
+
+            field := LineEdit {
+                text <=> root.value;
+                placeholder-text: root.placeholder;
+                enabled: root.interactive;
+                // Show the tail of the path (the meaningful part) unless the
+                // user is editing, where the caret should be visible.
+                horizontal-alignment: field.has-focus ? left : right;
+                edited(t) => { root.edited(t); }
+            }
+
+            Tooltip {
+                Text {
+                    text: root.value;
+                    max-width: 460px;
+                    wrap: word-wrap;
+                }
+            }
+
+            if root.error != "" || field.has-focus : Rectangle {
+                width: 100%;
+                height: 100%;
+                border-width: 1px;
+                border-radius: 6px;
+                border-color: root.error != "" ? Theme.danger : Theme.accent;
+                background: transparent;
+            }
+        }
+
+        if root.value != "" : IconButton {
+            icon: Icons.close;
+            label: root.clear-label;
+            button-size: 38px;
+            inert: !root.interactive;
+            y: (parent.height - self.height) / 2;
+            activated => {
+                root.value = "";
+                root.edited("");
+            }
+        }
+
+        ActionButton {
+            width: 110px;
+            control-height: 40px;
+            inert: !root.interactive;
+            y: (parent.height - self.height) / 2;
+            show-icon: true;
+            icon: Icons.folder;
+            label: root.button-label;
+            activated => { root.browse(); }
+        }
+    }
+
+    if root.error != "" : Text {
+        text: root.error;
+        color: Theme.danger;
+        font-size: 0.875rem;
+        wrap: word-wrap;
+    }
+}
+
+// Track-style slider with a visible fill and a high-contrast knob.
+component SliderBar inherits Rectangle {
+    in property <float> minimum: 0;
+    in property <float> maximum: 100;
+    in property <float> step: 1;
+    in-out property <float> value: 0;
+    in property <bool> interactive: true;
+    in property <bool> inert: false;
+    callback changed(float);
+    callback released(float);
+
+    accessible-role: slider;
+    accessible-value: Math.round(root.value);
+    // Keyboard and assistive-tech stepping. Consumers of `changed` own the
+    // actual value, so never assign `root.value` here.
+    accessible-action-increment => { root.step-by(root.step); }
+    accessible-action-decrement => { root.step-by(-root.step); }
+
+    public function step-by(delta: float) {
+        if (!root.interactive) { return; }
+        let next = Math.min(root.maximum, Math.max(root.minimum, root.value + delta));
+        if (next == root.value) { return; }
+        root.changed(next);
+        root.released(next);
+    }
+
+    height: 20px;
+    background: transparent;
+
+    property <float> frac: Math.min(1.0, Math.max(0.0,
+        (root.value - root.minimum) / Math.max(0.001, root.maximum - root.minimum)));
+
+    track := Rectangle {
+        x: 0px;
+        y: (parent.height - self.height) / 2;
+        width: parent.width;
+        height: 4px;
+        border-radius: 2px;
+        background: Theme.track;
+
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width * root.frac;
+            height: parent.height;
+            border-radius: 2px;
+            background: root.interactive ? Theme.accent : Theme.text3;
+        }
+    }
+
+    Rectangle {
+        width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        x: (parent.width - self.width) * root.frac;
+        y: (parent.height - self.height) / 2;
+        background: #ffffff;
+        border-width: 2px;
+        border-color: root.interactive ? Theme.accent : Theme.text3;
+        drop-shadow-color: #00000066;
+        drop-shadow-blur: 4px;
+        drop-shadow-offset-y: 1px;
+    }
+
+    property <bool> dragging: false;
+
+    ta := TouchArea {
+        enabled: root.interactive;
+
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down) {
+                fs.focus();
+                root.dragging = true;
+                root.set-from-pointer(ta.mouse-x);
+            } else if (event.kind == PointerEventKind.move && root.dragging) {
+                root.set-from-pointer(ta.mouse-x);
+            } else if (event.kind == PointerEventKind.up || event.kind == PointerEventKind.cancel) {
+                if (root.dragging) {
+                    root.dragging = false;
+                    root.released(root.value);
+                }
+            }
+        }
+    }
+
+    fs := FocusScope {
+        focus-on-click: false;
+        enabled: root.interactive;
+        focus-on-tab-navigation: !root.inert;
+        key-pressed(event) => {
+            if (event.text == Key.RightArrow || event.text == Key.UpArrow) {
+                root.step-by(root.step);
+                return accept;
+            }
+            if (event.text == Key.LeftArrow || event.text == Key.DownArrow) {
+                root.step-by(-root.step);
+                return accept;
+            }
+            if (event.text == Key.Home) {
+                root.changed(root.minimum);
+                root.released(root.minimum);
+                return accept;
+            }
+            if (event.text == Key.End) {
+                root.changed(root.maximum);
+                root.released(root.maximum);
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    if fs.has-focus && root.interactive : Rectangle {
+        border-width: 1px;
+        border-radius: 4px;
+        border-color: Theme.accent;
+    }
+
+    // NOTE: never assign `root.value` here. The slider is usually driven by a
+    // one-way binding (NumberSetting, preview scrubber); writing the property
+    // would silently drop that binding after the first drag. Consumers of
+    // `changed` write their own state back, which keeps the knob in sync.
+    public function set-from-pointer(px: length) {
+        if (root.maximum <= root.minimum) { return; }
+        let f = Math.min(1.0, Math.max(0.0, px / Math.max(1px, root.width)));
+        let raw = root.minimum + f * (root.maximum - root.minimum);
+        let snapped = Math.round(raw / root.step) * root.step;
+        root.changed(Math.min(root.maximum, Math.max(root.minimum, snapped)));
+    }
+}
+
+// Slider paired with a direct numeric input.
+component NumberSetting inherits HorizontalLayout {
+    in property <string> label: "";
+    in property <string> description: "";
+    in property <int> minimum: 0;
+    in property <int> maximum: 100;
+    in property <int> step: 1;
+    in-out property <int> value: 0;
+    callback describe(string);
+
+    spacing: 12px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+
+    Rectangle {
+        horizontal-stretch: 1;
+        vertical-stretch: 1;
+        background: transparent;
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: Theme.text2;
+                font-size: 0.9375rem;
+                font-weight: 500;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+        ta := TouchArea {
+            pointer-event(event) => {
+                if (event.kind == PointerEventKind.move && root.description != "") {
+                    root.describe(root.description);
+                }
+            }
+            clicked => {
+                if (root.description != "") {
+                    root.describe(root.description);
+                }
+            }
+        }
+    }
+
+    SliderBar {
+        width: 170px;
+        y: (parent.height - self.height) / 2;
+        minimum: root.minimum * 1.0;
+        maximum: root.maximum * 1.0;
+        step: root.step * 1.0;
+        value: root.value * 1.0;
+        changed(val) => {
+            root.value = Math.round(val);
+            root.describe(root.description);
+        }
+    }
+
+    SpinBox {
+        width: 96px;
+        y: (parent.height - self.height) / 2;
+        minimum: root.minimum;
+        maximum: root.maximum;
+        step-size: root.step;
+        value <=> root.value;
+        edited => { root.describe(root.description); }
+    }
+}
+
+// Setting row: label on the left, control passed via @children on the right.
+component SettingRow inherits HorizontalLayout {
+    in property <string> label: "";
+    in property <string> description: "";
+    callback describe(string);
+
+    spacing: 12px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+
+    Rectangle {
+        horizontal-stretch: 1;
+        vertical-stretch: 1;
+        background: transparent;
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: Theme.text2;
+                font-size: 0.9375rem;
+                font-weight: 500;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+        ta := TouchArea {
+            pointer-event(event) => {
+                if (event.kind == PointerEventKind.move && root.description != "") {
+                    root.describe(root.description);
+                }
+            }
+            clicked => {
+                if (root.description != "") {
+                    root.describe(root.description);
+                }
+            }
+        }
+    }
+
+    @children
+}
+
+// Custom checkbox so the control matches the theme (std-widgets draws a
+// native blue square that ignores the accent color).
+//
+// The root is a plain Rectangle with a full-size TouchArea overlay: inside a
+// HorizontalLayout a `TouchArea` child would be laid out as a *separate*
+// column, so only the empty space to the right of the box used to be
+// clickable. Here the box, the (optional) label and the hit area all share
+// the same 34px square.
+component CheckBox inherits Rectangle {
+    in property <string> text: "";
+    in-out property <bool> checked: false;
+    in property <bool> interactive: true;
+    callback toggled();
+
+    horizontal-stretch: 0;
+    min-width: 34px;
+    height: 34px;
+    background: transparent;
+
+    accessible-role: checkbox;
+    accessible-label: root.text;
+    accessible-checked: root.checked;
+    accessible-action-default => {
+        if (root.interactive) {
+            root.checked = !root.checked;
+            root.toggled();
+        }
+    }
+
+    HorizontalLayout {
+        alignment: center;
+        padding-left: 8px;
+        padding-right: 8px;
+
+        Rectangle {
+            width: 18px;
+            height: 18px;
+            border-radius: 5px;
+            border-width: 1px;
+            border-color: root.checked ? Theme.accent : Theme.border-strong;
+            background: root.checked ? Theme.accent : Theme.input;
+            opacity: root.interactive ? 1.0 : 0.62;
+
+            if root.checked : Icon {
+                source: Icons.check;
+                icon-size: 12px;
+                tint: Theme.on-accent;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+            }
+        }
+
+        Text {
+            text: root.text;
+            color: root.interactive ? Theme.text2 : Theme.text3;
+            font-size: 0.9375rem;
+            font-weight: 500;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+    }
+
+    ta := TouchArea {
+        enabled: root.interactive;
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled();
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Application window
+// ----------------------------------------------------------------------------
+export component AppWindow inherits Window {
+    title: window-title;
+    preferred-width: 1200px;
+    preferred-height: 800px;
+    min-width: 900px;
+    min-height: 520px;
+    // Borderless compositor fullscreen. F11 (or the header button) toggles it;
+    // the Rust side deliberately does not persist this across launches.
+    in-out property <bool> fullscreen-active: false;
+    full-screen: root.fullscreen-active;
+    background: @linear-gradient(160deg, #090d16 0%, #0b1220 55%, #0a1424 100%);
+    default-font-size: font-size * 1px;
+    forward-focus: app-keys;
+
+    init => {
+        Palette.color-scheme = ColorScheme.dark;
+    }
+
+    // Theme aliases keep the public Rust-facing API stable.
+    in-out property <color> col-bg <=> Theme.bg;
+    in-out property <color> col-card <=> Theme.card;
+    in-out property <color> col-card-hover <=> Theme.card-hover;
+    in-out property <color> col-border <=> Theme.border;
+    in-out property <color> col-border-highlight <=> Theme.border-strong;
+    in-out property <color> col-input <=> Theme.input;
+    in-out property <color> col-text <=> Theme.text;
+    in-out property <color> col-text2 <=> Theme.text2;
+    in-out property <color> col-text3 <=> Theme.text3;
+    in-out property <color> col-accent <=> Theme.accent;
+    in-out property <color> col-hover <=> Theme.hover;
+    in-out property <color> col-success <=> Theme.success;
+    in-out property <color> col-warn <=> Theme.warn;
+    in-out property <color> col-stage-blue <=> Theme.accent;
+
+    // Localization strings
+    in-out property <string> window-title: "TimelapseMaker";
+    in-out property <string> app-version: "2.0.0";
+    in-out property <string> str-settings: "Settings";
+    in-out property <string> str-help: "Help";
+    in-out property <string> str-about: "About TimelapseMaker";
+    in-out property <string> str-about-version: "Version";
+    in-out property <string> str-about-app-license: "Application code is MIT licensed.";
+    in-out property <string> str-about-slint-license: "The interface is built with Slint and used under the Slint Royalty-free 2.0 license.";
+    in-out property <string> str-about-third-party: "Third-party notices are included with every release.";
+    in-out property <string> str-about-copyright: "Copyright © vamtic";
+    in-out property <string> str-about-links: "slint.dev  ·  github.com/vamtic/makerr";
+    in-out property <string> str-setup: "Setup";
+    in-out property <string> str-setup-hint: "Complete the four steps, then create your timelapse.";
+    in-out property <string> str-ready-to-render: "Ready to render";
+    in-out property <string> str-encode-existing: "Encode existing frames";
+    in-out property <string> str-fullscreen: "Fullscreen (F11)";
+    in-out property <string> str-import-short: "Import";
+    in-out property <string> str-export-short: "Export";
+    in-out property <string> str-onboarding-title: "Welcome to TimelapseMaker";
+    in-out property <string> str-onboarding-body: "Select a canvas, specify coordinates and dates, and click Create.";
+    in-out property <string> str-got-it: "Got it";
+    in-out property <string> str-select-canvas: "Canvas";
+    in-out property <string> str-select-area: "Area (Corners)";
+    in-out property <string> str-first-cord: "Corner 1";
+    in-out property <string> str-second-cord: "Corner 2";
+    in-out property <string> str-date-range: "Date Range";
+    in-out property <string> str-start-date: "Start date";
+    in-out property <string> str-end-date: "End date";
+    in-out property <string> str-output-folder: "Output Folder";
+    in-out property <string> str-browse: "Browse";
+    in-out property <string> str-clear-field: "Clear";
+    in-out property <string> str-create-timelapse: "Create Timelapse";
+    in-out property <string> str-render-only: "Render Only";
+    in-out property <string> str-cancel: "Cancel";
+    in-out property <string> str-console: "Console Log";
+    in-out property <string> str-log-clear: "Clear";
+    in-out property <string> str-log-copy: "Copy";
+    in-out property <string> str-log-errors-only: "Errors only";
+    in-out property <string> str-area-preview: "Area Preview";
+    in-out property <string> str-preview-limit-exceeded: "Preview tile limit exceeded";
+    in-out property <string> str-preview-zoom-out: "Zoom out";
+    in-out property <string> str-preview-zoom-in: "Zoom in";
+    in-out property <string> str-preview-reset-view: "Reset view";
+    in-out property <string> str-preview-prev-day: "Previous day";
+    in-out property <string> str-preview-next-day: "Next day";
+    in-out property <string> str-online-canvas: "Online Canvas";
+    in-out property <string> str-pipeline: "Pipeline";
+    in-out property <string> str-progress: "Progress";
+    in-out property <string> str-ok: "OK";
+    in-out property <string> str-close: "Close";
+    in-out property <string> str-open-video: "Open Video";
+    in-out property <string> str-open-folder: "Open Folder";
+    in-out property <string> str-timelapse-created: "Timelapse Created!";
+    in-out property <string> str-studio-zero-disk: "Stream directly to video (zero disk)";
+    in-out property <string> str-studio-keep-png: "Keep PNG frames too";
+    in-out property <string> str-studio-timestamp: "Timestamp overlay";
+    in-out property <string> str-studio-progress-bar: "Progress bar overlay";
+    in-out property <string> str-studio-time-format: "Time format";
+    in-out property <string> str-studio-watermark: "Watermark text";
+    in-out property <string> str-studio-position: "Watermark position";
+    in-out property <string> str-studio-camera: "Camera motion";
+    in-out property <string> str-studio-camera-strength: "Camera strength";
+    in-out property <string> str-studio-frame: "Social framing";
+    in-out property <string> str-studio-audio: "Audio track";
+    in-out property <string> str-studio-audio-placeholder: "Optional: .mp3, .wav, .flac, .aac, .ogg";
+    in-out property <string> str-date-last7: "Last 7d";
+    in-out property <string> str-date-last30: "Last 30d";
+    in-out property <string> str-date-this-month: "This Month";
+    in-out property <string> str-live: "LIVE";
+    in-out property <string> str-tab-general: "General";
+    in-out property <string> str-tab-server: "Server";
+    in-out property <string> str-tab-download: "Download";
+    in-out property <string> str-tab-video: "Video";
+    in-out property <string> str-tab-effects: "Effects";
+    in-out property <string> str-tab-appearance: "Appearance";
+    in-out property <string> str-language: "Language";
+    in-out property <string> str-user-agent: "User Agent";
+    in-out property <string> str-preview-limit: "Preview limit";
+    in-out property <string> str-cache-retention: "Cache retention (days)";
+    in-out property <string> str-notify-on-completion: "Notify on completion";
+    in-out property <string> str-preset: "Preset";
+    in-out property <string> str-domain: "Domain";
+    in-out property <string> str-storage-domain: "Storage Domain";
+    in-out property <string> str-max-connections: "Max connections";
+    in-out property <string> str-max-concurrent-tiles: "Max concurrent tiles";
+    in-out property <string> str-adaptive-ceiling: "Effective ceiling:";
+    in-out property <string> str-max-concurrent-saves: "Max concurrent saves";
+    in-out property <string> str-adaptive-concurrency: "Adaptive concurrency";
+    in-out property <string> str-timeout: "Timeout (s)";
+    in-out property <string> str-max-retries: "Max retries";
+    in-out property <string> str-quality: "PNG quality";
+    in-out property <string> str-frame-skip: "Frame skip";
+    in-out property <string> str-link-mode: "Unchanged frames";
+    in-out property <string> str-output-format: "Output format";
+    in-out property <string> str-fps: "FPS";
+    in-out property <string> str-video-codec: "Video codec";
+    in-out property <string> str-hw-accel: "HW acceleration";
+    in-out property <string> str-font-size: "Font size";
+    in-out property <string> str-accent-color: "Accent color";
+    in-out property <string> str-hover-color: "Hover color";
+    in-out property <string> str-cache-size: "Cache size";
+    in-out property <string> str-clear-cache: "Clear Cache";
+    in-out property <string> str-clear-cache-confirm: "Confirm?";
+    in-out property <bool> clear-cache-armed: false;
+    in-out property <string> str-preview-loading: "Loading preview…";
+    in-out property <string> str-preview-empty-title: "Nothing to preview yet";
+    in-out property <string> str-preview-empty-body: "Choose a canvas and enter the two corner coordinates to load a preview of your area.";
+    in-out property <string> str-console-empty-title: "No activity yet";
+    in-out property <string> str-console-empty-body: "Progress, downloads and errors will appear here once a timelapse starts.";
+    in-out property <string> str-applies-next-run: "Server changes apply to the next run. Active downloads keep their current settings.";
+    in-out property <string> str-general-hint: "Language and appearance changes are applied when you save the settings.";
+    in-out property <string> str-appearance-hint: "Accent and hover colors update buttons, sliders and focus rings across the app.";
+    in-out property <string> str-effects-output: "Output";
+    in-out property <string> str-effects-overlays: "Overlays";
+    in-out property <string> str-effects-motion: "Motion & framing";
+    in-out property <string> desc-language: "";
+    in-out property <string> desc-user-agent: "";
+    in-out property <string> desc-preview-limit: "";
+    in-out property <string> desc-cache-ttl-days: "";
+    in-out property <string> desc-notify-on-completion: "";
+    in-out property <string> desc-preset: "";
+    in-out property <string> desc-domain: "";
+    in-out property <string> desc-storage-domain: "";
+    in-out property <string> desc-max-connections: "";
+    in-out property <string> desc-max-concurrent-tiles: "";
+    in-out property <string> desc-max-concurrent-saves: "";
+    in-out property <string> desc-adaptive-concurrency: "";
+    in-out property <string> desc-timeout: "";
+    in-out property <string> desc-max-retries: "";
+    in-out property <string> desc-quality: "";
+    in-out property <string> desc-frame-skip: "";
+    in-out property <string> desc-link-mode: "";
+    in-out property <string> desc-output-format: "";
+    in-out property <string> desc-fps: "";
+    in-out property <string> desc-video-codec: "";
+    in-out property <string> desc-hw-accel: "";
+    in-out property <string> desc-font-size: "";
+    in-out property <string> desc-accent-color: "";
+    in-out property <string> desc-hover-color: "";
+    in-out property <string> desc-effects-stream: "";
+    in-out property <string> desc-effects-png: "";
+    in-out property <string> desc-effects-timestamp: "";
+    in-out property <string> desc-effects-progress: "";
+    in-out property <string> desc-effects-time-format: "";
+    in-out property <string> desc-effects-watermark: "";
+    in-out property <string> desc-effects-position: "";
+    in-out property <string> desc-effects-camera: "";
+    in-out property <string> desc-effects-camera-strength: "";
+    in-out property <string> desc-effects-frame: "";
+    in-out property <string> desc-effects-audio: "";
+    in-out property <string> setting-desc: "Select a setting to see its description.";
+
+    // App state
+    in-out property <bool> onboarding-done: true;
+    in-out property <[string]> canvas-names: [];
+    in-out property <int> current-canvas-index: 0;
+    in-out property <string> canvas-list-error: "";
+    in-out property <string> coord1: "-128_-128";
+    in-out property <string> coord2: "128_128";
+    in-out property <string> start-date-str: "";
+    in-out property <string> end-date-str: "";
+    in-out property <string> output-folder: "";
+    in-out property <bool> is-running: false;
+    in-out property <bool> input-ready: false;
+    in-out property <int> date-preset-active: -1;
+
+    // Live validation and computed hints
+    in-out property <string> coord1-error: "";
+    in-out property <string> coord2-error: "";
+    in-out property <string> start-date-error: "";
+    in-out property <string> end-date-error: "";
+    in-out property <string> folder-error: "";
+    in-out property <string> canvas-error-text: "";
+    in-out property <string> validate-hint: "";
+    /// Non-empty when the current region/date range does not fit in RAM or on
+    /// disk with the selected output mode (direct pipe vs. PNG frames).
+    in-out property <string> capacity-warning: "";
+    in-out property <string> dims-text: "";
+    in-out property <string> log-error-text: "";
+
+    // Pipeline & Progress
+    in-out property <int> pipeline-stage: -1;
+    in-out property <float> progress-fraction: 0.0;
+    in-out property <string> progress-text: "";
+    in-out property <string> progress-detail: "";
+    in-out property <string> download-stats: "";
+    in-out property <string> status-text: "";
+    in-out property <string> eta-text: "";
+
+    // Preview
+    in-out property <image> preview-image;
+    // Intrinsic width / height of `preview-image`, supplied by Rust. The region
+    // can be any aspect ratio, so pan/zoom must clamp against this rather than
+    // assuming a square preview.
+    in-out property <float> preview-aspect: 1.0;
+    in-out property <bool> has-preview: false;
+    in-out property <bool> preview-limit-exceeded: false;
+    // A preview request is in flight: the header shows a "loading" pill and the
+    // image dims, so a slow fetch never looks like a frozen UI.
+    in-out property <bool> preview-loading: false;
+    // True when the last run produced a video file that can be opened.
+    in-out property <bool> output-available: false;
+    // Raised by Rust when the typed accent/hover text is not a valid color.
+    in-out property <bool> accent-invalid: false;
+    in-out property <bool> hover-invalid: false;
+    in-out property <string> preview-day-text: "";
+    in-out property <string> preview-date-text: "";
+    in-out property <float> preview-scrub-pos: 0.0;
+    in-out property <int> preview-day-count: 1;
+    in-out property <string> tile-info-text: "";
+    in-out property <bool> can-preview-back: false;
+    in-out property <bool> can-preview-fwd: false;
+    in-out property <float> preview-zoom: 1.0;
+    in-out property <length> preview-pan-x: 0px;
+    in-out property <length> preview-pan-y: 0px;
+    in-out property <bool> pan-active: false;
+    in-out property <length> pan-drag-x: 0px;
+    in-out property <length> pan-drag-y: 0px;
+
+    // Console
+    in-out property <[LogItem]> log-items: [];
+    in-out property <bool> log-errors-only: false;
+    in-out property <bool> console-expanded: false;
+    // True while the console should stay pinned to the newest line. A manual
+    // scroll turns it off until the drawer is reopened or a new run starts.
+    in-out property <bool> log-follow: true;
+    changed is-running => { if (is-running) { log-follow = true; } }
+
+    // Localized option arrays
+    in-out property <[string]> stage-names: ["Area Selected", "Tiles Found", "Downloading Tiles", "Rendering Frames", "Encoding Video"];
+    in-out property <[string]> watermark-options: ["Top left", "Top right", "Bottom left", "Bottom right"];
+    in-out property <[string]> camera-options: ["Static", "Zoom out", "Zoom in", "Pan left to right", "Pan right to left"];
+    in-out property <[string]> frame-options: ["Source region", "Vertical 9:16", "Square 1:1", "Wide 16:9"];
+
+    // Dialogs
+    in-out property <bool> show-settings: false;
+    in-out property <bool> show-about: false;
+    // True while any modal dialog is up: background widgets drop out of the
+    // Tab order so keyboard focus stays inside the dialog.
+    out property <bool> modal-open: show-settings || show-completion || show-about;
+    in-out property <int> settings-tab: 0;
+    in-out property <bool> show-completion: false;
+    in-out property <string> completion-summary: "";
+
+    // Draft settings
+    in-out property <int> draft-preset-idx: 0;
+    in-out property <string> draft-domain: "pixelplanet.fun";
+    in-out property <string> draft-storage-domain: "storage.gs-os.com";
+    in-out property <int> draft-lang-idx: 0;
+    in-out property <string> draft-user-agent: "";
+    in-out property <int> draft-preview-limit: 1024;
+    in-out property <int> draft-cache-ttl-days: 7;
+    in-out property <bool> draft-notify-on-completion: false;
+    in-out property <int> draft-max-connections: 50;
+    in-out property <int> draft-max-concurrent-tiles: 64;
+    in-out property <int> draft-max-concurrent-saves: 2;
+    in-out property <bool> draft-adaptive-concurrency: true;
+    in-out property <int> draft-timeout: 30;
+    in-out property <int> draft-max-retries: 3;
+    in-out property <int> draft-quality: 0;
+    in-out property <int> draft-frame-skip: 0;
+    in-out property <int> draft-link-mode: 0;
+    in-out property <int> draft-output-format: 0;
+    in-out property <int> draft-fps: 30;
+    in-out property <int> draft-video-codec: 0;
+    in-out property <int> draft-hw-accel: 0;
+    // Studio FX (now hosted by the Effects settings tab)
+    in-out property <bool> draft-stream-video: true;
+    in-out property <bool> draft-save-png-sequence: true;
+    in-out property <bool> draft-show-timestamp: false;
+    in-out property <string> draft-timestamp-format: "%Y-%m-%d %H:%M";
+    in-out property <bool> draft-show-progress-bar: false;
+    in-out property <string> draft-watermark-text: "";
+    in-out property <int> draft-watermark-position: 1;
+    in-out property <int> draft-camera-motion: 0;
+    in-out property <int> draft-camera-strength: 20;
+    in-out property <int> draft-social-preset: 0;
+    in-out property <string> draft-audio-path: "";
+    in-out property <int> font-size: 14;
+    in-out property <string> draft-accent-color: "#2b9ed9";
+    in-out property <string> draft-hover-color: "#144870";
+    in-out property <color> accent-swatch: #2b9ed9;
+    in-out property <color> hover-swatch: #144870;
+    in-out property <string> cache-stats-text: "0.0 MB (0 tiles)";
+
+    // Callbacks
+    callback open-settings();
+    callback save-settings();
+    callback cancel-settings();
+    callback clear-cache();
+    callback import-template();
+    callback export-template();
+    callback dismiss-onboarding();
+    callback canvas-selected(int);
+    callback coord1-changed(string);
+    callback coord2-changed(string);
+    callback start-date-changed(string);
+    callback end-date-changed(string);
+    callback date-preset(int);
+    callback output-folder-changed(string);
+    callback browse-output-folder();
+    callback browse-audio();
+    callback accent-color-changed(string);
+    callback hover-color-changed(string);
+    callback start-timelapse();
+    callback start-render-only();
+    callback cancel-process();
+    callback log-clear();
+    callback log-copy();
+    callback toggle-log-errors-only();
+    callback preview-step-day(int);
+    callback preview-scrub(int);
+    callback open-video();
+    callback open-folder();
+    callback close-completion();
+    callback preset-selected(int);
+    callback console-toggled();
+
+    // Size of the image as `image-fit: contain` paints it at 100% zoom.
+    // Using the intrinsic aspect avoids the old square-preview assumption,
+    // which let non-square regions pan too far (or not at all) in fullscreen.
+    function preview-content-width() -> length {
+        let aspect = Math.max(preview-aspect, 0.0001);
+        return Math.min(preview-canvas.width, preview-canvas.height * aspect);
+    }
+
+    function preview-content-height() -> length {
+        let aspect = Math.max(preview-aspect, 0.0001);
+        return Math.min(preview-canvas.height, preview-canvas.width / aspect);
+    }
+
+    // Keeps the panned preview inside its viewport: at or below 100% zoom the
+    // image cannot be moved at all, and above 100% it can never be dragged
+    // further than its own overhang.
+    function clamp-preview-pan() {
+        let content-width = root.preview-content-width() * preview-zoom;
+        let content-height = root.preview-content-height() * preview-zoom;
+        let max-x = Math.max(0px, (content-width - preview-canvas.width) / 2);
+        let max-y = Math.max(0px, (content-height - preview-canvas.height) / 2);
+        preview-pan-x = Math.max(-max-x, Math.min(max-x, preview-pan-x));
+        preview-pan-y = Math.max(-max-y, Math.min(max-y, preview-pan-y));
+    }
+
+    // Global keyboard shortcuts need this scope to be an ancestor of every
+    // focusable widget, otherwise key events never reach capture-key-pressed
+    // once a LineEdit/Button takes focus. Keep the whole window inside it.
+    app-keys := FocusScope {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+
+        capture-key-pressed(event) => {
+            if (event.text == Key.F11) {
+                root.fullscreen-active = !root.fullscreen-active;
+                return accept;
+            }
+            if (event.text == Key.Escape) {
+                if (show-about) { show-about = false; return accept; }
+                if (show-settings) { cancel-settings(); return accept; }
+                if (show-completion) { close-completion(); return accept; }
+                if (is-running) { cancel-process(); return accept; }
+                if (root.fullscreen-active) { root.fullscreen-active = false; return accept; }
+            }
+            if (event.modifiers.control && event.text == Key.Return) {
+                if (!is-running && input-ready && !show-settings && !show-completion && !show-about) {
+                    start-timelapse();
+                    return accept;
+                }
+            }
+            if (event.modifiers.control && event.text == ",") {
+                if (!show-settings && !show-completion && !show-about) {
+                    open-settings();
+                    return accept;
+                }
+            }
+            return reject;
+        }
+
+    VerticalLayout {
+            x: 0;
+            y: 0;
+            width: root.width;
+            height: root.height;
+            padding: 0px;
+            spacing: 0px;
+
+            // -----------------------------------------------------------------
+            // Header
+            // -----------------------------------------------------------------
+            Rectangle {
+                height: 60px;
+                background: #0b1322f2;
+                border-width: 1px;
+                border-color: Theme.border;
+
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    spacing: 12px;
+
+                    Rectangle {
+                        width: 32px;
+                        height: 32px;
+                        border-radius: 9px;
+                        background: @linear-gradient(135deg, Theme.accent 0%, Theme.hover 100%);
+                        border-width: 1px;
+                        border-color: Theme.accent-soft-border;
+                        y: (parent.height - self.height) / 2;
+
+                        Rectangle {
+                            x: 8px;
+                            y: 8px;
+                            width: 7px;
+                            height: 7px;
+                            border-radius: 2px;
+                            background: #ffffff;
+                        }
+
+                        Rectangle {
+                            x: 17px;
+                            y: 8px;
+                            width: 7px;
+                            height: 7px;
+                            border-radius: 2px;
+                            background: #d8fbe9;
+                        }
+
+                        Rectangle {
+                            x: 8px;
+                            y: 17px;
+                            width: 7px;
+                            height: 7px;
+                            border-radius: 2px;
+                            background: #d8fbe9;
+                        }
+
+                        Rectangle {
+                            x: 17px;
+                            y: 17px;
+                            width: 7px;
+                            height: 7px;
+                            border-radius: 2px;
+                            background: #ffffff;
+                        }
+                    }
+
+                    Text {
+                        text: window-title;
+                        color: Theme.text;
+                        font-size: 1.25rem;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                        // Shrink (and elide) before the right-hand actions get
+                        // pushed out of the header on narrow windows / large
+                        // font sizes.
+                        min-width: 0px;
+                        overflow: elide;
+                    }
+
+                    Rectangle {
+                        width: 1px;
+                        height: 20px;
+                        background: Theme.border;
+                        y: (parent.height - self.height) / 2;
+                    }
+
+                    // The domain pill is decorative: drop it when the header
+                    // starts running out of room instead of overlapping the
+                    // Import/Export/Settings actions.
+                    if root.width > 980px : Rectangle {
+                        height: 28px;
+                        border-radius: 14px;
+                        background: Theme.input;
+                        border-width: 1px;
+                        border-color: Theme.accent-soft-border;
+                        y: (parent.height - self.height) / 2;
+
+                        HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 11px;
+                            spacing: 6px;
+                            alignment: center;
+
+                            Text {
+                                text: draft-domain;
+                                color: Theme.accent-text;
+                                font-size: 0.875rem;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    Rectangle { horizontal-stretch: 1; }
+
+                    import-button := ActionButton {
+                        inert: modal-open;
+                        control-height: 32px;
+                        y: (parent.height - self.height) / 2;
+                        show-icon: true;
+                        icon: Icons.download;
+                        label: str-import-short;
+                        activated => { import-template(); }
+                    }
+
+                    export-button := ActionButton {
+                        inert: modal-open;
+                        control-height: 32px;
+                        y: (parent.height - self.height) / 2;
+                        show-icon: true;
+                        icon: Icons.upload;
+                        label: str-export-short;
+                        activated => { export-template(); }
+                    }
+
+                    IconButton {
+                        icon: Icons.fullscreen;
+                        label: str-fullscreen;
+                        button-size: 32px;
+                        inert: modal-open;
+                        y: (parent.height - self.height) / 2;
+                        activated => { root.fullscreen-active = !root.fullscreen-active; }
+                    }
+
+                    about-button := ActionButton {
+                        inert: modal-open;
+                        control-height: 32px;
+                        y: (parent.height - self.height) / 2;
+                        show-icon: true;
+                        icon: Icons.help;
+                        label: str-help;
+                        activated => { show-about = true; }
+                    }
+
+                    settings-button := ActionButton {
+                        inert: modal-open;
+                        control-height: 32px;
+                        y: (parent.height - self.height) / 2;
+                        show-icon: true;
+                        icon: Icons.settings;
+                        label: str-settings;
+                        activated => { open-settings(); }
+                    }
+                }
+            }
+
+            // -----------------------------------------------------------------
+            // Capacity preflight warning (RAM / disk)
+            // -----------------------------------------------------------------
+            if capacity-warning != "" : Rectangle {
+                background: Theme.warn-soft;
+                border-width: 1px;
+                border-color: Theme.warn;
+
+                HorizontalLayout {
+                    padding-left: 18px;
+                    padding-right: 18px;
+                    padding-top: 7px;
+                    padding-bottom: 7px;
+                    spacing: 9px;
+
+                    Icon {
+                        source: Icons.info;
+                        icon-size: 15px;
+                        tint: Theme.warn;
+                        y: (parent.height - self.height) / 2;
+                    }
+                    Text {
+                        text: capacity-warning;
+                        color: Theme.warn;
+                        font-size: 0.8125rem;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            // -----------------------------------------------------------------
+            // Main body
+            // -----------------------------------------------------------------
+            HorizontalLayout {
+                padding: 14px;
+                spacing: 14px;
+                vertical-stretch: 1;
+
+                // Left sidebar -------------------------------------------------
+                Rectangle {
+                    width: 412px;
+                    background: transparent;
+
+                    VerticalLayout {
+                        spacing: 10px;
+
+                        ScrollView {
+                            vertical-stretch: 1;
+                            vertical-scrollbar-policy: always-on;
+                            VerticalLayout {
+                                spacing: 10px;
+                                padding-right: 8px;
+
+                                // Setup context header
+                                Rectangle {
+                                    border-radius: Theme.radius-lg;
+                                    background: Theme.card;
+                                    border-width: 1px;
+                                    border-color: Theme.border;
+
+                                    VerticalLayout {
+                                        padding: 10px;
+                                        spacing: 4px;
+
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            Icon {
+                                                source: Icons.play;
+                                                icon-size: 15px;
+                                                tint: Theme.accent;
+                                                y: (parent.height - self.height) / 2;
+                                            }
+                                            Text {
+                                                text: str-setup;
+                                                color: Theme.text;
+                                                font-size: 1rem;
+                                                font-weight: 800;
+                                                vertical-alignment: center;
+                                                horizontal-stretch: 1;
+                                            }
+                                            Rectangle {
+                                                height: 22px;
+                                                border-radius: 11px;
+                                                background: input-ready ? Theme.accent-faint : Theme.input;
+                                                border-width: 1px;
+                                                border-color: input-ready ? Theme.accent-soft-border : Theme.border;
+                                                y: (parent.height - self.height) / 2;
+
+                                                HorizontalLayout {
+                                                    padding-left: 9px;
+                                                    padding-right: 9px;
+                                                    alignment: center;
+                                                    Text {
+                                                        text: input-ready ? str-ready-to-render : "4";
+                                                        color: input-ready ? Theme.accent-text : Theme.text3;
+                                                        font-size: 0.8125rem;
+                                                        font-weight: 700;
+                                                        vertical-alignment: center;
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Text {
+                                            text: str-setup-hint;
+                                            color: Theme.text3;
+                                            font-size: 0.875rem;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+
+                                // Canvas picker
+                                Card {
+                                    step: 1;
+                                    title: str-select-canvas;
+                                    meta: str-online-canvas;
+
+                                    ComboBox {
+                                        model: canvas-names;
+                                        current-index <=> current-canvas-index;
+                                        selected(val) => { canvas-selected(current-canvas-index); }
+                                    }
+                                    if canvas-list-error != "" : Text {
+                                        text: canvas-list-error;
+                                        color: Theme.warn;
+                                        font-size: 0.875rem;
+                                        wrap: word-wrap;
+                                    }
+                                    if canvas-error-text != "" : Text {
+                                        text: canvas-error-text;
+                                        color: Theme.danger;
+                                        font-size: 0.875rem;
+                                        wrap: word-wrap;
+                                    }
+                                }
+
+                                // Area coordinates
+                                Card {
+                                    step: 2;
+                                    title: str-select-area;
+                                    meta: "x_y";
+
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        FormField {
+                                            interactive: !modal-open;
+                                            horizontal-stretch: 1;
+                                            min-width: 100px;
+                                            label: str-first-cord;
+                                            placeholder: "-128_-128";
+                                            value <=> coord1;
+                                            error: coord1-error;
+                                            edited(t) => { coord1-changed(t); }
+                                        }
+                                        FormField {
+                                            interactive: !modal-open;
+                                            horizontal-stretch: 1;
+                                            min-width: 100px;
+                                            label: str-second-cord;
+                                            placeholder: "128_128";
+                                            value <=> coord2;
+                                            error: coord2-error;
+                                            edited(t) => { coord2-changed(t); }
+                                        }
+                                    }
+
+                                    if dims-text != "" : Text {
+                                        text: dims-text;
+                                        color: Theme.text3;
+                                        font-size: 0.875rem;
+                                    }
+                                }
+
+                                // Dates
+                                Card {
+                                    step: 3;
+                                    title: str-date-range;
+                                    meta: "YYYY-MM-DD";
+
+                                    Rectangle {
+                                        height: 30px;
+                                        border-radius: 8px;
+                                        background: Theme.input;
+                                        border-width: 1px;
+                                        border-color: Theme.border;
+
+                                        HorizontalLayout {
+                                            padding: 2px;
+                                            spacing: 2px;
+                                            Chip {
+                                                inert: modal-open;
+                                                horizontal-stretch: 1;
+                                                label: str-date-last7;
+                                                active: date-preset-active == 0;
+                                                activated => { date-preset-active = 0; date-preset(0); }
+                                            }
+                                            Chip {
+                                                inert: modal-open;
+                                                horizontal-stretch: 1;
+                                                label: str-date-last30;
+                                                active: date-preset-active == 1;
+                                                activated => { date-preset-active = 1; date-preset(1); }
+                                            }
+                                            Chip {
+                                                inert: modal-open;
+                                                horizontal-stretch: 1;
+                                                label: str-date-this-month;
+                                                active: date-preset-active == 2;
+                                                activated => { date-preset-active = 2; date-preset(2); }
+                                            }
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        FormField {
+                                            interactive: !modal-open;
+                                            horizontal-stretch: 1;
+                                            min-width: 100px;
+                                            label: str-start-date;
+                                            placeholder: "YYYY-MM-DD";
+                                            value <=> start-date-str;
+                                            error: start-date-error;
+                                            edited(t) => { date-preset-active = -1; start-date-changed(t); }
+                                        }
+                                        FormField {
+                                            interactive: !modal-open;
+                                            horizontal-stretch: 1;
+                                            min-width: 100px;
+                                            label: str-end-date;
+                                            placeholder: "YYYY-MM-DD";
+                                            value <=> end-date-str;
+                                            error: end-date-error;
+                                            edited(t) => { date-preset-active = -1; end-date-changed(t); }
+                                        }
+                                    }
+                                }
+
+                                // Output folder
+                                Card {
+                                    step: 4;
+                                    title: str-output-folder;
+
+                                    FileField {
+                                        interactive: !modal-open;
+                                        value <=> output-folder;
+                                        button-label: str-browse;
+                                        clear-label: str-clear-field;
+                                        placeholder: "maker/timelapse";
+                                        error: folder-error;
+                                        edited(t) => { output-folder-changed(t); }
+                                        browse => { browse-output-folder(); }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Primary actions (sticky footer, below the scrolled settings)
+                        Card {
+                            ActionButton {
+                                inert: modal-open;
+                                control-height: 44px;
+                                primary: true;
+                                show-icon: true;
+                                icon: Icons.play;
+                                label: str-create-timelapse;
+                                interactive: !is-running && input-ready;
+                                activated => { start-timelapse(); }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                ActionButton {
+                                    inert: modal-open;
+                                    horizontal-stretch: 1;
+                                    show-icon: true;
+                                    icon: Icons.film;
+                                    label: str-render-only;
+                                    interactive: !is-running;
+                                    activated => { start-render-only(); }
+                                }
+                                ActionButton {
+                                    inert: modal-open;
+                                    horizontal-stretch: 1;
+                                    danger: is-running;
+                                    show-icon: true;
+                                    icon: Icons.close;
+                                    label: str-cancel;
+                                    interactive: is-running;
+                                    activated => { cancel-process(); }
+                                }
+                            }
+
+                            if !input-ready && validate-hint != "" : Text {
+                                text: "•  " + validate-hint;
+                                color: Theme.warn;
+                                font-size: 0.875rem;
+                                wrap: word-wrap;
+                            }
+                            if is-running && status-text != "" : Text {
+                                text: "•  " + status-text;
+                                color: Theme.text3;
+                                font-size: 0.875rem;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+
+                // Right panel --------------------------------------------------
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 10px;
+
+                    // Preview card
+                    Rectangle {
+                        vertical-stretch: 1;
+                        min-height: 120px;
+                        border-radius: Theme.radius-lg;
+                        background: Theme.card;
+                        border-width: 1px;
+                        border-color: Theme.border;
+
+                        VerticalLayout {
+                            padding: 12px;
+                            spacing: 8px;
+
+                            HorizontalLayout {
+                                spacing: 8px;
+
+                                Rectangle {
+                                    width: 3px;
+                                    height: 13px;
+                                    border-radius: 2px;
+                                    background: Theme.accent;
+                                    y: (parent.height - self.height) / 2;
+                                }
+                                Text {
+                                    text: str-area-preview;
+                                    color: Theme.text;
+                                    font-size: 1rem;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+
+                                if is-running : Rectangle {
+                                    height: 21px;
+                                    border-radius: 11px;
+                                    background: #052e1a;
+                                    border-width: 1px;
+                                    border-color: #22c55e80;
+                                    y: (parent.height - self.height) / 2;
+
+                                    HorizontalLayout {
+                                        padding-left: 7px;
+                                        padding-right: 8px;
+                                        spacing: 5px;
+                                        alignment: center;
+                                        Text {
+                                            text: str-live;
+                                            color: #86efac;
+                                            font-size: 0.8125rem;
+                                            font-weight: 700;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+
+                                Rectangle { horizontal-stretch: 1; }
+
+                                // Fetch indicator: shown while a requested preview
+                                // is being downloaded and composed.
+                                if preview-loading && !is-running : Rectangle {
+                                    height: 21px;
+                                    horizontal-stretch: 0;
+                                    width: loading-pill.preferred-width + 2px;
+                                    border-radius: 11px;
+                                    background: Theme.input;
+                                    border-width: 1px;
+                                    border-color: Theme.border;
+
+                                    loading-pill := HorizontalLayout {
+                                        padding-left: 8px;
+                                        padding-right: 9px;
+                                        spacing: 5px;
+                                        alignment: center;
+                                        Rectangle {
+                                            width: 5px;
+                                            height: 5px;
+                                            border-radius: 2.5px;
+                                            background: Theme.accent;
+                                        }
+                                        Text {
+                                            text: str-preview-loading;
+                                            color: Theme.text2;
+                                            font-size: 0.8125rem;
+                                            font-weight: 600;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+
+                                if has-preview && !preview-limit-exceeded : HorizontalLayout {
+                                    spacing: 2px;
+                                    alignment: center;
+                                    zoom-out-btn := IconButton {
+                                        inert: modal-open;
+                                        icon: Icons.minus;
+                                        label: str-preview-zoom-out;
+                                        y: (parent.height - self.height) / 2;
+                                        interactive: preview-zoom > 0.2;
+                                        activated => { preview-zoom = Math.max(preview-zoom / 1.25, 0.2); clamp-preview-pan(); }
+                                    }
+                                    Text {
+                                        text: Math.round(preview-zoom * 100) + "%";
+                                        color: Theme.text2;
+                                        font-size: 0.875rem;
+                                        font-weight: 600;
+                                        width: Math.max(42px, 2.4rem + 12px);
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                    zoom-in-btn := IconButton {
+                                        inert: modal-open;
+                                        icon: Icons.plus;
+                                        label: str-preview-zoom-in;
+                                        y: (parent.height - self.height) / 2;
+                                        interactive: preview-zoom < 10.0;
+                                        activated => { preview-zoom = Math.min(preview-zoom * 1.25, 10.0); clamp-preview-pan(); }
+                                    }
+                                    reset-view-btn := IconButton {
+                                        inert: modal-open;
+                                        icon: Icons.eye;
+                                        label: str-preview-reset-view;
+                                        y: (parent.height - self.height) / 2;
+                                        interactive: preview-zoom != 1.0 || preview-pan-x != 0px || preview-pan-y != 0px;
+                                        activated => {
+                                            preview-zoom = 1.0;
+                                            preview-pan-x = 0px;
+                                            preview-pan-y = 0px;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Unobstructed preview canvas
+                            preview-canvas := Rectangle {
+                                background: Theme.input;
+                                border-radius: 8px;
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                vertical-stretch: 1;
+                                clip: true;
+
+                                if preview-limit-exceeded : Text {
+                                    text: str-preview-limit-exceeded;
+                                    color: Theme.warn;
+                                    font-size: 1rem;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+
+                                if !has-preview && !preview-limit-exceeded : VerticalLayout {
+                                    alignment: center;
+                                    spacing: 9px;
+                                    HorizontalLayout {
+                                        alignment: center;
+                                        Icon {
+                                            source: Icons.image;
+                                            icon-size: 40px;
+                                            tint: Theme.text3;
+                                        }
+                                    }
+                                    Text {
+                                        text: str-preview-empty-title;
+                                        color: Theme.text2;
+                                        font-size: 1rem;
+                                        font-weight: 600;
+                                        horizontal-alignment: center;
+                                        vertical-stretch: 1;
+                                        vertical-alignment: center;
+                                    }
+                                    HorizontalLayout {
+                                        alignment: center;
+                                        Text {
+                                            width: Math.min(360px, parent.width - 40px);
+                                            text: str-preview-empty-body;
+                                            color: Theme.text3;
+                                            font-size: 0.875rem;
+                                            horizontal-alignment: center;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+
+                                if has-preview && !preview-limit-exceeded : Rectangle {
+                                    // Exactly the painted image rectangle (not
+                                    // the full viewport), so the centering and
+                                    // pan math below are correct for non-square
+                                    // regions too.
+                                    width: root.preview-content-width() * preview-zoom;
+                                    height: root.preview-content-height() * preview-zoom;
+                                    // Dim the stale frame while the replacement
+                                    // is being fetched, so the update is visible.
+                                    opacity: preview-loading ? 0.55 : 1.0;
+                                    animate opacity { duration: 120ms; }
+                                    x: (parent.width - self.width) / 2 + preview-pan-x;
+                                    y: (parent.height - self.height) / 2 + preview-pan-y;
+
+                                    Image {
+                                        source: preview-image;
+                                        width: 100%;
+                                        height: 100%;
+                                        image-fit: contain;
+                                    }
+                                }
+
+                                // Pan and zoom surface (timeline overlay stays interactive)
+                                if has-preview && !preview-limit-exceeded : pan-area := TouchArea {
+                                    width: parent.width;
+                                    height: parent.height - 52px;
+                                    x: 0px;
+                                    y: 0px;
+
+                                    scroll-event(event) => {
+                                        if (event.delta-y > 0) {
+                                            preview-zoom = Math.min(preview-zoom * 1.15, 10.0);
+                                        } else if (event.delta-y < 0) {
+                                            preview-zoom = Math.max(preview-zoom / 1.15, 0.2);
+                                        }
+                                        root.clamp-preview-pan();
+                                        accept
+                                    }
+
+                                    pointer-event(event) => {
+                                        if (event.kind == PointerEventKind.down) {
+                                            pan-active = true;
+                                            pan-drag-x = self.mouse-x;
+                                            pan-drag-y = self.mouse-y;
+                                        } else if (event.kind == PointerEventKind.move) {
+                                            if (pan-active) {
+                                                preview-pan-x += self.mouse-x - pan-drag-x;
+                                                preview-pan-y += self.mouse-y - pan-drag-y;
+                                                root.clamp-preview-pan();
+                                                pan-drag-x = self.mouse-x;
+                                                pan-drag-y = self.mouse-y;
+                                            }
+                                        } else if (event.kind == PointerEventKind.up
+                                                || event.kind == PointerEventKind.cancel) {
+                                            pan-active = false;
+                                        }
+                                    }
+
+                                    double-clicked => {
+                                        preview-zoom = 1.0;
+                                        preview-pan-x = 0px;
+                                        preview-pan-y = 0px;
+                                    }
+                                }
+
+                                // Day timeline with scrubber
+                                if has-preview && preview-day-text != "" && !is-running && !preview-limit-exceeded : Rectangle {
+                                    width: parent.width - 20px;
+                                    height: 44px;
+                                    x: 10px;
+                                    y: parent.height - self.height - 10px;
+                                    border-radius: 10px;
+                                    background: #07101ff2;
+                                    border-width: 1px;
+                                    border-color: Theme.border-strong;
+                                    drop-shadow-color: #00000088;
+                                    drop-shadow-blur: 10px;
+                                    drop-shadow-offset-y: 3px;
+
+                                    HorizontalLayout {
+                                        padding-left: 6px;
+                                        padding-right: 6px;
+                                        spacing: 8px;
+
+                                        IconButton {
+                                            inert: modal-open;
+                                            icon: Icons.chevron-left;
+                                            label: str-preview-prev-day;
+                                            interactive: can-preview-back;
+                                            y: (parent.height - self.height) / 2;
+                                            activated => { preview-step-day(-1); }
+                                        }
+
+                                        Rectangle {
+                                            width: 128px;
+                                            height: 28px;
+                                            border-radius: 7px;
+                                            background: #0a1120;
+                                            border-width: 1px;
+                                            border-color: Theme.border;
+                                            y: (parent.height - self.height) / 2;
+
+                                            Text {
+                                                text: preview-date-text;
+                                                color: #f8fafc;
+                                                font-size: 0.875rem;
+                                                font-weight: 600;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                                overflow: clip;
+                                            }
+                                        }
+
+                                        SliderBar {
+                                            inert: modal-open;
+                                            horizontal-stretch: 1;
+                                            y: (parent.height - self.height) / 2;
+                                            minimum: 0;
+                                            maximum: Math.max(0, preview-day-count - 1) * 1.0;
+                                            step: 1.0;
+                                            value: preview-scrub-pos;
+                                            interactive: preview-day-count > 1;
+                                            changed(val) => { preview-scrub-pos = val; }
+                                            // Fetch only when the drag ends, otherwise a
+                                            // long range would queue one request per pixel.
+                                            released(val) => { preview-scrub(Math.round(val)); }
+                                        }
+
+                                        IconButton {
+                                            inert: modal-open;
+                                            icon: Icons.chevron-right;
+                                            label: str-preview-next-day;
+                                            interactive: can-preview-fwd;
+                                            y: (parent.height - self.height) / 2;
+                                            activated => { preview-step-day(1); }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if is-running && preview-day-text != "" : Text {
+                                text: preview-day-text;
+                                color: Theme.text3;
+                                font-size: 0.875rem;
+                                overflow: elide;
+                            }
+                            if !is-running && !preview-limit-exceeded && tile-info-text != "" : Text {
+                                text: tile-info-text;
+                                color: Theme.text3;
+                                font-size: 0.875rem;
+                            }
+                        }
+                    }
+
+                    // Unified run panel (keeps preview large when idle)
+                    if is-running || progress-fraction > 0 : Rectangle {
+                        height: is-running ? 170px : 82px;
+                        border-radius: Theme.radius-lg;
+                        background: Theme.card;
+                        border-width: 1px;
+                        border-color: Theme.border;
+
+                        VerticalLayout {
+                            padding: 12px;
+                            spacing: 7px;
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Rectangle { width: 3px; height: 13px; border-radius: 2px; background: Theme.accent; y: (parent.height - self.height) / 2; }
+                                Text {
+                                    text: str-pipeline;
+                                    color: Theme.text;
+                                    font-size: 1rem;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                                if eta-text != "" : Text {
+                                    text: eta-text;
+                                    color: Theme.accent;
+                                    font-size: 0.875rem;
+                                    font-weight: 600;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: progress-text != "" ? progress-text : Math.round(progress-fraction * 100) + "%";
+                                    color: Theme.accent;
+                                    font-size: 1rem;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            if is-running : HorizontalLayout {
+                                spacing: 6px;
+
+                                for stage-name[idx] in stage-names : Rectangle {
+                                    horizontal-stretch: 1;
+                                    height: 30px;
+                                    border-radius: 8px;
+                                    border-width: 1px;
+                                    border-color: pipeline-stage > idx ? Theme.success.mix(#000000, 0.65)
+                                        : (pipeline-stage == idx ? Theme.accent-soft-border : Theme.border);
+                                    background: pipeline-stage > idx ? Theme.success.with-alpha(0.08)
+                                        : (pipeline-stage == idx ? Theme.accent-faint : Theme.input);
+
+                                    HorizontalLayout {
+                                        padding-left: 7px;
+                                        padding-right: 7px;
+                                        spacing: 6px;
+                                        alignment: center;
+
+                                        if pipeline-stage > idx : Icon {
+                                            source: Icons.check;
+                                            icon-size: 11px;
+                                            tint: Theme.success;
+                                            y: (parent.height - self.height) / 2;
+                                        }
+                                        if pipeline-stage <= idx : Rectangle {
+                                            width: 8px;
+                                            height: 8px;
+                                            border-radius: 4px;
+                                            border-width: 1px;
+                                            border-color: pipeline-stage == idx ? Theme.accent : Theme.border-strong;
+                                            background: pipeline-stage == idx ? Theme.accent : transparent;
+                                            y: (parent.height - self.height) / 2;
+                                        }
+                                        Text {
+                                            text: stage-name;
+                                            color: pipeline-stage > idx ? Theme.success
+                                                : (pipeline-stage == idx ? Theme.text : Theme.text2);
+                                            font-size: 0.8125rem;
+                                            font-weight: pipeline-stage == idx ? 700 : 500;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 1;
+                                            overflow: elide;
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                height: 7px;
+                                border-radius: 3.5px;
+                                background: Theme.track;
+                                border-width: 1px;
+                                border-color: Theme.border;
+
+                                Rectangle {
+                                    width: parent.width * Math.min(1.0, Math.max(0.0, progress-fraction));
+                                    height: parent.height;
+                                    border-radius: 3.5px;
+                                    background: @linear-gradient(90deg, Theme.accent.mix(#000000, 0.8) 0%, Theme.accent 70%, Theme.accent.mix(Theme.violet, 0.8) 100%);
+                                    x: 0px;
+                                    y: 0px;
+                                }
+                            }
+
+                            if is-running : HorizontalLayout {
+                                Text { text: progress-detail; color: Theme.text2; font-size: 0.875rem; font-weight: 500; vertical-alignment: center; overflow: elide; }
+                                Rectangle { width: 12px; }
+                                Text { text: download-stats; color: Theme.accent-text; font-size: 0.875rem; font-weight: 500; vertical-alignment: center; overflow: elide; }
+                                Rectangle { horizontal-stretch: 1; }
+                                if status-text != "" : Text {
+                                    text: status-text;
+                                    color: Theme.text3;
+                                    font-size: 0.875rem;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                            }
+
+                            if !is-running : HorizontalLayout {
+                                Text { text: progress-detail; color: Theme.text3; font-size: 0.875rem; vertical-alignment: center; overflow: elide; }
+                                Rectangle { horizontal-stretch: 1; }
+                                Text { text: progress-text != "" ? progress-text : Math.round(progress-fraction * 100) + "%"; color: Theme.text3; font-size: 0.875rem; font-weight: 600; vertical-alignment: center; }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // -----------------------------------------------------------------
+            // Console drawer (in-flow so the body shrinks instead of being covered)
+            // -----------------------------------------------------------------
+            Rectangle {
+                // Keep the console from swallowing the editor on short
+                // windows: at 520px height a fixed 240px drawer left the
+                // sidebar and preview almost unusable.
+                height: console-expanded ? 220px : 48px;
+                background: #0b1322;
+                border-width: 1px;
+                border-color: Theme.border;
+                clip: true;
+
+                VerticalLayout {
+                    spacing: 0px;
+
+                    Rectangle {
+                        height: 48px;
+                        background: transparent;
+
+                        HorizontalLayout {
+                            padding-left: 12px;
+                            padding-right: 10px;
+                            spacing: 8px;
+
+                            Rectangle {
+                                width: 170px;
+                                height: 48px;
+                                background: transparent;
+
+                                fs := FocusScope {
+                                    focus-on-click: false;
+                                    key-pressed(event) => {
+                                        if (event.text == " " || event.text == "\n") {
+                                            console-expanded = !console-expanded;
+                                            log-follow = true;
+                                            console-toggled();
+                                            return accept;
+                                        }
+                                        return reject;
+                                    }
+                                }
+                                ta := TouchArea {
+                                    accessible-role: button;
+                                    accessible-label: str-console;
+                                    clicked => { console-expanded = !console-expanded; log-follow = true; console-toggled(); }
+                                }
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    alignment: center;
+                                    Icon {
+                                        source: console-expanded ? Icons.chevron-down : Icons.chevron-right;
+                                        icon-size: 14px;
+                                        tint: ta.has-hover ? Theme.text : Theme.text3;
+                                        y: (parent.height - self.height) / 2;
+                                    }
+                                    Icon {
+                                        source: Icons.terminal;
+                                        icon-size: 14px;
+                                        tint: ta.has-hover ? Theme.accent : Theme.text3;
+                                        y: (parent.height - self.height) / 2;
+                                    }
+                                    Text {
+                                        text: str-console;
+                                        color: Theme.text2;
+                                        font-size: 0.9375rem;
+                                        font-weight: 600;
+                                        vertical-stretch: 1;
+                                        vertical-alignment: center;
+                                    }
+                                    if log-error-text != "" : Rectangle {
+                                        height: 18px;
+                                        y: (parent.height - self.height) / 2;
+                                        border-radius: 9px;
+                                        background: #3f1622;
+                                        border-width: 1px;
+                                        border-color: #ef444466;
+
+                                        HorizontalLayout {
+                                            padding-left: 7px;
+                                            padding-right: 7px;
+                                            Text {
+                                                text: log-error-text;
+                                                color: #fecdd3;
+                                                font-size: 0.8125rem;
+                                                font-weight: 600;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle { horizontal-stretch: 1; }
+
+                            if console-expanded : IconButton {
+                                inert: modal-open;
+                                icon: Icons.trash;
+                                label: str-log-clear;
+                                // Clearing is refused while a job runs; disable the
+                                // control instead of silently swallowing the click.
+                                interactive: !is-running;
+                                y: (parent.height - self.height) / 2;
+                                activated => { log-clear(); }
+                            }
+                            if console-expanded : IconButton {
+                                inert: modal-open;
+                                icon: Icons.copy;
+                                label: str-log-copy;
+                                y: (parent.height - self.height) / 2;
+                                activated => { log-copy(); }
+                            }
+                            if console-expanded : Chip {
+                                inert: modal-open;
+                                label: str-log-errors-only;
+                                active: log-errors-only;
+                                y: (parent.height - self.height) / 2;
+                                activated => { toggle-log-errors-only(); }
+                            }
+                        }
+                    }
+
+                    if console-expanded : Rectangle {
+                        background: Theme.input;
+                        border-width: 1px;
+                        border-color: Theme.border;
+                        vertical-stretch: 1;
+
+                        // Keep the console pinned to the newest line; the timer ticks
+                        // after layout, so content-height already includes freshly
+                        // added rows. It runs whenever the drawer is open (not only
+                        // while a job is running) so a timer created mid-run starts
+                        // immediately and the final lines are still reached.
+                        Timer {
+                            interval: 250ms;
+                            running: console-expanded;
+                            triggered => {
+                                if (log-follow) {
+                                    log-scroll.content-y = log-scroll.visible-height - log-scroll.content-height;
+                                }
+                            }
+                        }
+
+                        log-scroll := ScrollView {
+                            vertical-scrollbar-policy: always-on;
+                            // A user scroll detaches from the tail; reopening the
+                            // drawer or starting a run re-attaches it.
+                            scrolled => { log-follow = false; }
+                            // Follow the tail of the log: new lines must stay visible
+                            // during long runs instead of growing below the fold.
+                            init => { self.content-y = self.visible-height - self.content-height; }
+                            VerticalLayout {
+                                padding: 10px;
+                                spacing: 4px;
+                                for item in log-items : HorizontalLayout {
+                                    spacing: 8px;
+                                    Rectangle {
+                                        width: 6px;
+                                        height: 6px;
+                                        border-radius: 3px;
+                                        y: (parent.height - self.height) / 2;
+                                        background: item.level == 1 ? Theme.accent
+                                            : (item.level == 2 ? Theme.warn
+                                            : (item.level == 3 ? #f87171
+                                            : (item.level == 4 ? Theme.violet : Theme.text3)));
+                                    }
+                                    Text {
+                                        text: item.message;
+                                        color: item.level == 1 ? Theme.accent-text
+                                            : (item.level == 2 ? Theme.warn
+                                            : (item.level == 3 ? #f87171
+                                            : (item.level == 4 ? Theme.violet : Theme.text2)));
+                                        font-size: 0.875rem;
+                                        font-family: "monospace";
+                                        wrap: word-wrap;
+                                        horizontal-stretch: 1;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Empty state overlay (the scroll view stays mounted so the
+                        // follow-tail timer can always address it).
+                        if log-items.length == 0 : VerticalLayout {
+                            alignment: center;
+                            spacing: 6px;
+                            HorizontalLayout {
+                                alignment: center;
+                                Icon {
+                                    source: Icons.terminal;
+                                    icon-size: 26px;
+                                    tint: Theme.text3;
+                                }
+                            }
+                            Text {
+                                text: str-console-empty-title;
+                                color: Theme.text2;
+                                font-size: 0.9375rem;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                            }
+                            HorizontalLayout {
+                                alignment: center;
+                                Text {
+                                    width: Math.min(420px, parent.width - 40px);
+                                    text: str-console-empty-body;
+                                    color: Theme.text3;
+                                    font-size: 0.875rem;
+                                    horizontal-alignment: center;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+
+                    }
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // Completion dialog
+        // ---------------------------------------------------------------------
+        if show-completion : Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            background: #020617d9;
+
+            TouchArea { }
+
+            Rectangle {
+                width: Math.min(460px, parent.width - 40px);
+                height: Math.min(parent.height - 40px, 330px);
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                background: #111a2e;
+                border-radius: 16px;
+                border-width: 1px;
+                border-color: #22c55e66;
+                drop-shadow-color: #000000aa;
+                drop-shadow-blur: 28px;
+                drop-shadow-offset-y: 10px;
+
+                VerticalLayout {
+                    padding: 26px;
+                    spacing: 13px;
+                    alignment: center;
+
+                    HorizontalLayout {
+                        alignment: center;
+
+                        Rectangle {
+                            width: 50px;
+                            height: 50px;
+                            border-radius: 25px;
+                            background: #052e1a;
+                            border-width: 1px;
+                            border-color: #22c55e80;
+
+                            Icon {
+                                source: Icons.check;
+                                icon-size: 24px;
+                                tint: #4ade80;
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: str-timelapse-created;
+                        color: Theme.text;
+                        font-size: 1.5rem;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                    }
+
+                    Text {
+                        text: completion-summary;
+                        color: Theme.text2;
+                        font-size: 0.9375rem;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 10px;
+                        alignment: center;
+
+                        ActionButton {
+                            width: 138px;
+                            control-height: 36px;
+                            primary: true;
+                            show-icon: true;
+                            icon: Icons.play;
+                            label: str-open-video;
+                            interactive: output-available;
+                            activated => { open-video(); }
+                        }
+                        ActionButton {
+                            width: 138px;
+                            control-height: 36px;
+                            show-icon: true;
+                            icon: Icons.folder;
+                            label: str-open-folder;
+                            activated => { open-folder(); }
+                        }
+                    }
+
+                    ActionButton {
+                        control-height: 30px;
+                        label: str-close;
+                        activated => { close-completion(); }
+                    }
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // About dialog
+        // ---------------------------------------------------------------------
+        if show-about : Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            background: #020617d9;
+
+            TouchArea { }
+
+            Rectangle {
+                width: Math.min(600px, parent.width - 40px);
+                height: Math.min(600px, parent.height - 40px);
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                background: #0f1726;
+                border-radius: 16px;
+                border-width: 1px;
+                border-color: Theme.border-strong;
+                drop-shadow-color: #000000aa;
+                drop-shadow-blur: 28px;
+                drop-shadow-offset-y: 10px;
+
+                VerticalLayout {
+                    padding: 24px;
+                    spacing: 14px;
+
+                    HorizontalLayout {
+                        spacing: 12px;
+
+                        Rectangle {
+                            width: 42px;
+                            height: 42px;
+                            border-radius: 12px;
+                            background: @linear-gradient(135deg, Theme.accent 0%, Theme.hover 100%);
+                            border-width: 1px;
+                            border-color: Theme.accent-soft-border;
+                            y: (parent.height - self.height) / 2;
+
+                            Rectangle {
+                                x: 11px;
+                                y: 11px;
+                                width: 8px;
+                                height: 8px;
+                                border-radius: 2px;
+                                background: #ffffff;
+                            }
+                            Rectangle {
+                                x: 22px;
+                                y: 11px;
+                                width: 8px;
+                                height: 8px;
+                                border-radius: 2px;
+                                background: #d8fbe9;
+                            }
+                            Rectangle {
+                                x: 11px;
+                                y: 22px;
+                                width: 8px;
+                                height: 8px;
+                                border-radius: 2px;
+                                background: #d8fbe9;
+                            }
+                            Rectangle {
+                                x: 22px;
+                                y: 22px;
+                                width: 8px;
+                                height: 8px;
+                                border-radius: 2px;
+                                background: #ffffff;
+                            }
+                        }
+
+                        Text {
+                            text: str-about;
+                            color: Theme.text;
+                            font-size: 1.375rem;
+                            font-weight: 800;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+
+                        IconButton {
+                            icon: Icons.close;
+                            label: str-close;
+                            button-size: 30px;
+                            activated => { show-about = false; }
+                        }
+                    }
+
+                    Text {
+                        text: str-about-version + " " + app-version;
+                        color: Theme.text2;
+                        font-size: 0.9375rem;
+                        font-weight: 600;
+                    }
+
+                    Text {
+                        text: str-about-copyright;
+                        color: Theme.text3;
+                        font-size: 0.875rem;
+                    }
+
+                    Rectangle { height: 1px; background: Theme.border; }
+
+                    Text {
+                        text: str-about-app-license;
+                        color: Theme.text2;
+                        font-size: 0.875rem;
+                        wrap: word-wrap;
+                    }
+
+                    Text {
+                        text: str-about-slint-license;
+                        color: Theme.text2;
+                        font-size: 0.875rem;
+                        wrap: word-wrap;
+                    }
+
+                    Text {
+                        text: str-about-third-party;
+                        color: Theme.text3;
+                        font-size: 0.875rem;
+                        wrap: word-wrap;
+                    }
+
+                    Rectangle {
+                        height: 124px;
+                        border-radius: Theme.radius-lg;
+                        background: Theme.input;
+                        border-width: 1px;
+                        border-color: Theme.border;
+
+                        HorizontalLayout {
+                            padding: 8px;
+                            alignment: center;
+                            AboutSlint { }
+                        }
+                    }
+
+                    Text {
+                        text: str-about-links;
+                        color: Theme.text3;
+                        font-size: 0.875rem;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
+
+                    Rectangle { vertical-stretch: 1; }
+
+                    HorizontalLayout {
+                        alignment: center;
+                        ActionButton {
+                            width: 120px;
+                            control-height: 34px;
+                            label: str-close;
+                            activated => { show-about = false; }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------------
+        // Settings dialog
+        // ---------------------------------------------------------------------
+        if show-settings : Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            background: #020617d9;
+
+            TouchArea { }
+
+            Rectangle {
+                width: Math.min(800px, parent.width - 40px);
+                height: Math.min(560px, parent.height - 40px);
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                background: #0e1526;
+                border-radius: 16px;
+                border-width: 1px;
+                border-color: Theme.border-strong;
+                drop-shadow-color: #000000bb;
+                drop-shadow-blur: 30px;
+                drop-shadow-offset-y: 12px;
+
+                VerticalLayout {
+                    padding: 0px;
+                    spacing: 0px;
+
+                    // Dialog header
+                    Rectangle {
+                        height: 48px;
+                        background: #111a2e;
+
+                        HorizontalLayout {
+                            padding-left: 14px;
+                            padding-right: 12px;
+                            padding-top: 12px;
+                            padding-bottom: 12px;
+                            spacing: 10px;
+
+                            Icon {
+                                source: Icons.settings;
+                                icon-size: 18px;
+                                tint: Theme.accent;
+                                y: (parent.height - self.height) / 2;
+                            }
+                            Text {
+                                text: str-settings;
+                                color: Theme.text;
+                                font-size: 1.25rem;
+                                font-weight: 700;
+                                vertical-alignment: center;
+                                horizontal-stretch: 1;
+                            }
+                            Rectangle {
+                                height: 24px;
+                                border-radius: 6px;
+                                background: Theme.input;
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                y: (parent.height - self.height) / 2;
+
+                                HorizontalLayout {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+                                    Text {
+                                        text: "Ctrl + ,";
+                                        color: Theme.text3;
+                                        font-size: 0.8125rem;
+                                        font-weight: 500;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                            IconButton {
+                                icon: Icons.close;
+                                label: str-close;
+                                y: (parent.height - self.height) / 2;
+                                activated => { cancel-settings(); }
+                            }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: Theme.border; }
+
+                    // Body: vertical nav + content
+                    HorizontalLayout {
+                        vertical-stretch: 1;
+                        spacing: 0px;
+
+                        Rectangle {
+                            width: 160px;
+                            background: #0b1322;
+                            border-width: 1px;
+                            border-color: Theme.border;
+
+                            VerticalLayout {
+                                padding-left: 10px;
+                                padding-right: 8px;
+                                padding-top: 10px;
+                                padding-bottom: 10px;
+                                spacing: 3px;
+
+                                nav-general := NavItem {
+                                    label: str-tab-general;
+                                    icon: Icons.settings;
+                                    active: settings-tab == 0;
+                                    activated => { settings-tab = 0; }
+                                }
+                                nav-server := NavItem {
+                                    label: str-tab-server;
+                                    icon: Icons.server;
+                                    active: settings-tab == 1;
+                                    activated => { settings-tab = 1; }
+                                }
+                                nav-download := NavItem {
+                                    label: str-tab-download;
+                                    icon: Icons.download;
+                                    active: settings-tab == 2;
+                                    activated => { settings-tab = 2; }
+                                }
+                                nav-video := NavItem {
+                                    label: str-tab-video;
+                                    icon: Icons.film;
+                                    active: settings-tab == 3;
+                                    activated => { settings-tab = 3; }
+                                }
+                                nav-effects := NavItem {
+                                    label: str-tab-effects;
+                                    icon: Icons.sliders;
+                                    active: settings-tab == 4;
+                                    activated => { settings-tab = 4; }
+                                }
+                                nav-appearance := NavItem {
+                                    label: str-tab-appearance;
+                                    icon: Icons.palette;
+                                    active: settings-tab == 5;
+                                    activated => { settings-tab = 5; }
+                                }
+
+                                Rectangle { vertical-stretch: 1; }
+
+                                Text {
+                                    text: "Ctrl + Enter  ·  Esc";
+                                    color: Theme.text3;
+                                    font-size: 0.8125rem;
+                                    horizontal-alignment: center;
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            background: transparent;
+
+                            VerticalLayout {
+                                padding: 20px;
+                                spacing: 10px;
+
+                                Text {
+                                    text: settings-tab == 0 ? str-tab-general
+                                        : settings-tab == 1 ? str-tab-server
+                                        : settings-tab == 2 ? str-tab-download
+                                        : settings-tab == 3 ? str-tab-video
+                                        : settings-tab == 4 ? str-tab-effects
+                                        : str-tab-appearance;
+                                    color: Theme.text;
+                                    font-size: 1.167rem;
+                                    font-weight: 700;
+                                }
+
+                                ScrollView {
+                                    vertical-stretch: 1;
+                                    vertical-scrollbar-policy: always-on;
+
+                                    VerticalLayout {
+                                        padding-right: 8px;
+                                        spacing: 2px;
+
+                                        // General
+                                        if settings-tab == 0 : VerticalLayout {
+                                            spacing: 2px;
+
+                                            SettingRow {
+                                                label: str-language;
+                                                description: desc-language;
+                                                describe(d) => { setting-desc = d; }
+                                                ComboBox {
+                                                    width: 240px;
+                                                    height: 34px;
+                                                    model: ["English", "Magyar"];
+                                                    current-index <=> draft-lang-idx;
+                                                    selected(v) => { setting-desc = desc-language; }
+                                                }
+                                            }
+
+                                            SettingRow {
+                                                label: str-user-agent;
+                                                description: desc-user-agent;
+                                                describe(d) => { setting-desc = d; }
+                                                LineEdit {
+                                                    width: 320px;
+                                                    height: 34px;
+                                                    text <=> draft-user-agent;
+                                                    edited(t) => { setting-desc = desc-user-agent; }
+                                                }
+                                            }
+
+                                            NumberSetting {
+                                                label: str-preview-limit;
+                                                description: desc-preview-limit;
+                                                minimum: 1;
+                                                maximum: 10000;
+                                                value <=> draft-preview-limit;
+                                                describe(d) => { setting-desc = d; }
+                                            }
+
+                                            NumberSetting {
+                                                label: str-cache-retention;
+                                                description: desc-cache-ttl-days;
+                                                minimum: 0;
+                                                maximum: 90;
+                                                value <=> draft-cache-ttl-days;
+                                                describe(d) => { setting-desc = d; }
+                                            }
+
+                                            SettingRow {
+                                                label: str-notify-on-completion;
+                                                description: desc-notify-on-completion;
+                                                describe(d) => { setting-desc = d; }
+                                                CheckBox {
+                                                    checked <=> draft-notify-on-completion;
+                                                    toggled => { setting-desc = desc-notify-on-completion; }
+                                                }
+                                            }
+
+                                            Rectangle { height: 6px; }
+                                            Rectangle {
+                                                min-height: 54px;
+                                                border-radius: 8px;
+                                                background: Theme.accent-faint;
+                                                border-width: 1px;
+                                                border-color: Theme.accent-soft-border;
+
+                                                HorizontalLayout {
+                                                    padding-left: 12px;
+                                                    padding-right: 12px;
+                                                    padding-top: 8px;
+                                                    padding-bottom: 8px;
+                                                    spacing: 9px;
+                                                    Icon {
+                                                        source: Icons.info;
+                                                        icon-size: 15px;
+                                                        tint: Theme.accent;
+                                                        y: (parent.height - self.height) / 2;
+                                                    }
+                                                    Text {
+                                                        text: str-general-hint;
+                                                        color: Theme.text2;
+                                                        font-size: 0.875rem;
+                                                        wrap: word-wrap;
+                                                        horizontal-stretch: 1;
+                                                        vertical-stretch: 1;
+                                                        vertical-alignment: center;
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Server
+                                        if settings-tab == 1 : VerticalLayout {
+                                            spacing: 2px;
+
+                                            SettingRow {
+                                                label: str-preset;
+                                                description: desc-preset;
+                                                describe(d) => { setting-desc = d; }
+                                                ComboBox {
+                                                    width: 240px;
+                                                    height: 34px;
+                                                    model: ["PixelPlanet", "PixelYa", "PixMap", "PXU", "Custom"];
+                                                    current-index <=> draft-preset-idx;
+                                                    selected(val) => {
+                                                        preset-selected(draft-preset-idx);
+                                                        setting-desc = desc-preset;
+                                                    }
+                                                }
+                                            }
+
+                                            SettingRow {
+                                                label: str-domain;
+                                                description: desc-domain;
+                                                describe(d) => { setting-desc = d; }
+                                                LineEdit {
+                                                    width: 320px;
+                                                    height: 34px;
+                                                    text <=> draft-domain;
+                                                    edited(t) => { setting-desc = desc-domain; }
+                                                }
+                                            }
+
+                                            SettingRow {
+                                                label: str-storage-domain;
+                                                description: desc-storage-domain;
+                                                describe(d) => { setting-desc = d; }
+                                                LineEdit {
+                                                    width: 320px;
+                                                    height: 34px;
+                                                    text <=> draft-storage-domain;
+                                                    edited(t) => { setting-desc = desc-storage-domain; }
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                min-height: 54px;
+                                                border-radius: 8px;
+                                                background: Theme.accent-faint;
+                                                border-width: 1px;
+                                                border-color: Theme.accent-soft-border;
+
+                                                HorizontalLayout {
+                                                    padding-left: 12px;
+                                                    padding-right: 12px;
+                                                    padding-top: 8px;
+                                                    padding-bottom: 8px;
+                                                    spacing: 9px;
+                                                    Icon {
+                                                        source: Icons.info;
+                                                        icon-size: 15px;
+                                                        tint: Theme.accent;
+                                                        y: (parent.height - self.height) / 2;
+                                                    }
+                                                    Text {
+                                                        text: str-applies-next-run;
+                                                        color: Theme.text2;
+                                                        font-size: 0.875rem;
+                                                        wrap: word-wrap;
+                                                        horizontal-stretch: 1;
+                                                        vertical-stretch: 1;
+                                                        vertical-alignment: center;
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Download
+                                        if settings-tab == 2 : VerticalLayout {
+                                            spacing: 2px;
+
+                                            NumberSetting {
+                                                label: str-max-connections;
+                                                description: desc-max-connections;
+                                                minimum: 1;
+                                                maximum: 500;
+                                                value <=> draft-max-connections;
+                                                describe(d) => { setting-desc = d; }
+                                            }
+                                            NumberSetting {
+                                                label: str-max-concurrent-tiles;
+                                                description: desc-max-concurrent-tiles;
+                                                minimum: 1;
+                                                maximum: 256;
+                                                value <=> draft-max-concurrent-tiles;
+                                                describe(d) => { setting-desc = d; }
+                                            }
+                                            // The adaptive limiter ramps up to twice the
+                                            // configured value, hard-capped at 256, so the
+                                            // real ceiling is shown instead of left implicit.
+                                            HorizontalLayout {
+                                                padding-left: 12px;
+                                                padding-bottom: 4px;
+                                                Text {
+                                                    text: str-adaptive-ceiling + " " + (draft-adaptive-concurrency
+                                                        ? (((draft-max-concurrent-tiles * 2) > 256) ? 256 : (draft-max-concurrent-tiles * 2))
+                                                        : draft-max-concurrent-tiles);
+                                                    color: Theme.text3;
+                                                    font-size: 0.8125rem;
+                                                }
+                                            }
+                                            NumberSetting {
+                                                label: str-max-concurrent-saves;
+                                                description: desc-max-concurrent-saves;
+                                                minimum: 1;
+                                                maximum: 8;
+                                                value <=> draft-max-concurrent-saves;
+                                                describe(d) => { setting-desc = d; }
+                                            }
+                                            SettingRow {
+                                                label: str-adaptive-concurrency;
+                                                description: desc-adaptive-concurrency;
+                                                describe(d) => { setting-desc = d; }
+                                                CheckBox {
+                                                    checked <=> draft-adaptive-concurrency;
+                                                    toggled => { setting-desc = desc-adaptive-concurrency; }
+                                                }
+                                            }
+                                            NumberSetting {
+                                                label: str-timeout;
+                                                description: desc-timeout;
+                                                minimum: 5;
+                                                maximum: 300;
+                                                value <=> draft-timeout;
+                                                describe(d) => { setting-desc = d; }
+                                            }
+                                            NumberSetting {
+                                                label: str-max-retries;
+                                                description: desc-max-retries;
+                                                minimum: 0;
+                                                maximum: 10;
+                                                value <=> draft-max-retries;
+                                                describe(d) => { setting-desc = d; }
+                                            }
+                                            NumberSetting {
+                                                label: str-quality;
+                                                description: desc-quality;
+                                                minimum: -1;
+                                                maximum: 9;
+                                                value <=> draft-quality;
+                                                describe(d) => { setting-desc = d; }
+                                            }
+                                            NumberSetting {
+                                                label: str-frame-skip;
+                                                description: desc-frame-skip;
+                                                minimum: 0;
+                                                maximum: 60;
+                                                value <=> draft-frame-skip;
+                                                describe(d) => { setting-desc = d; }
+                                            }
+                                            SettingRow {
+                                                label: str-link-mode;
+                                                description: desc-link-mode;
+                                                describe(d) => { setting-desc = d; }
+                                                ComboBox {
+                                                    width: 240px;
+                                                    height: 34px;
+                                                    model: ["auto", "hard", "soft", "copy"];
+                                                    current-index <=> draft-link-mode;
+                                                    selected(v) => { setting-desc = desc-link-mode; }
+                                                }
+                                            }
+
+                                            // Tile cache tools live with the other
+                                            // download controls, instead of the
+                                            // global dialog footer.
+                                            SettingRow {
+                                                label: str-cache-size;
+                                                description: "";
+                                                describe(d) => { setting-desc = d; }
+
+                                                HorizontalLayout {
+                                                    spacing: 10px;
+                                                    alignment: center;
+
+                                                    Text {
+                                                        text: cache-stats-text;
+                                                        color: Theme.text3;
+                                                        font-size: 0.875rem;
+                                                        vertical-alignment: center;
+                                                        min-width: 140px;
+                                                        overflow: elide;
+                                                    }
+
+                                                    clear-cache-button := ActionButton {
+                                                        label: clear-cache-armed ? str-clear-cache-confirm : str-clear-cache;
+                                                        danger: clear-cache-armed;
+                                                        control-height: 28px;
+                                                        activated => {
+                                                            if (clear-cache-armed) {
+                                                                clear-cache();
+                                                                clear-cache-armed = false;
+                                                            } else {
+                                                                clear-cache-armed = true;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Video
+                                        if settings-tab == 3 : VerticalLayout {
+                                            spacing: 2px;
+
+                                            SettingRow {
+                                                label: str-output-format;
+                                                description: desc-output-format;
+                                                describe(d) => { setting-desc = d; }
+                                                ComboBox {
+                                                    width: 240px;
+                                                    height: 34px;
+                                                    model: ["mp4", "mkv", "webm", "mov", "avi"];
+                                                    current-index <=> draft-output-format;
+                                                    selected(v) => { setting-desc = desc-output-format; }
+                                                }
+                                            }
+
+                                            NumberSetting {
+                                                label: str-fps;
+                                                description: desc-fps;
+                                                minimum: 1;
+                                                maximum: 120;
+                                                value <=> draft-fps;
+                                                describe(d) => { setting-desc = d; }
+                                            }
+
+                                            SettingRow {
+                                                label: str-video-codec;
+                                                description: desc-video-codec;
+                                                describe(d) => { setting-desc = d; }
+                                                ComboBox {
+                                                    width: 240px;
+                                                    height: 34px;
+                                                    model: ["H.264", "H.265", "AV1"];
+                                                    current-index <=> draft-video-codec;
+                                                    selected(v) => { setting-desc = desc-video-codec; }
+                                                }
+                                            }
+
+                                            SettingRow {
+                                                label: str-hw-accel;
+                                                description: desc-hw-accel;
+                                                describe(d) => { setting-desc = d; }
+                                                ComboBox {
+                                                    width: 240px;
+                                                    height: 34px;
+                                                    model: ["auto", "none", "nvenc", "amf", "qsv", "vaapi"];
+                                                    current-index <=> draft-hw-accel;
+                                                    selected(v) => { setting-desc = desc-hw-accel; }
+                                                }
+                                            }
+                                        }
+
+                                        // Effects (formerly the sidebar Studio FX card)
+                                        if settings-tab == 4 : VerticalLayout {
+                                            spacing: 2px;
+
+                                            Text {
+                                                text: str-effects-output;
+                                                color: Theme.accent;
+                                                font-size: 0.8125rem;
+                                                font-weight: 700;
+                                            }
+
+                                            SettingRow {
+                                                label: str-studio-zero-disk;
+                                                description: desc-effects-stream;
+                                                describe(d) => { setting-desc = d; }
+                                                CheckBox {
+                                                    checked <=> draft-stream-video;
+                                                    toggled => { setting-desc = desc-effects-stream; }
+                                                }
+                                            }
+                                            SettingRow {
+                                                label: str-studio-keep-png;
+                                                description: desc-effects-png;
+                                                describe(d) => { setting-desc = d; }
+                                                CheckBox {
+                                                    checked <=> draft-save-png-sequence;
+                                                    toggled => { setting-desc = desc-effects-png; }
+                                                }
+                                            }
+
+                                            Rectangle { height: 6px; }
+                                            Text {
+                                                text: str-effects-overlays;
+                                                color: Theme.accent;
+                                                font-size: 0.8125rem;
+                                                font-weight: 700;
+                                            }
+
+                                            SettingRow {
+                                                label: str-studio-timestamp;
+                                                description: desc-effects-timestamp;
+                                                describe(d) => { setting-desc = d; }
+                                                CheckBox {
+                                                    checked <=> draft-show-timestamp;
+                                                    toggled => { setting-desc = desc-effects-timestamp; }
+                                                }
+                                            }
+                                            SettingRow {
+                                                label: str-studio-progress-bar;
+                                                description: desc-effects-progress;
+                                                describe(d) => { setting-desc = d; }
+                                                CheckBox {
+                                                    checked <=> draft-show-progress-bar;
+                                                    toggled => { setting-desc = desc-effects-progress; }
+                                                }
+                                            }
+                                            SettingRow {
+                                                label: str-studio-time-format;
+                                                description: desc-effects-time-format;
+                                                describe(d) => { setting-desc = d; }
+                                                LineEdit {
+                                                    width: 240px;
+                                                    height: 34px;
+                                                    text <=> draft-timestamp-format;
+                                                    edited(t) => { setting-desc = desc-effects-time-format; }
+                                                }
+                                            }
+                                            SettingRow {
+                                                label: str-studio-watermark;
+                                                description: desc-effects-watermark;
+                                                describe(d) => { setting-desc = d; }
+                                                LineEdit {
+                                                    width: 240px;
+                                                    height: 34px;
+                                                    text <=> draft-watermark-text;
+                                                    placeholder-text: "@my_channel";
+                                                    edited(t) => { setting-desc = desc-effects-watermark; }
+                                                }
+                                            }
+                                            SettingRow {
+                                                label: str-studio-position;
+                                                description: desc-effects-position;
+                                                describe(d) => { setting-desc = d; }
+                                                ComboBox {
+                                                    width: 240px;
+                                                    height: 34px;
+                                                    model: watermark-options;
+                                                    current-index <=> draft-watermark-position;
+                                                    selected(v) => { setting-desc = desc-effects-position; }
+                                                }
+                                            }
+
+                                            Rectangle { height: 6px; }
+                                            Text {
+                                                text: str-effects-motion;
+                                                color: Theme.accent;
+                                                font-size: 0.8125rem;
+                                                font-weight: 700;
+                                            }
+
+                                            SettingRow {
+                                                label: str-studio-camera;
+                                                description: desc-effects-camera;
+                                                describe(d) => { setting-desc = d; }
+                                                ComboBox {
+                                                    width: 240px;
+                                                    height: 34px;
+                                                    model: camera-options;
+                                                    current-index <=> draft-camera-motion;
+                                                    selected(v) => { setting-desc = desc-effects-camera; }
+                                                }
+                                            }
+                                            NumberSetting {
+                                                label: str-studio-camera-strength;
+                                                description: desc-effects-camera-strength;
+                                                minimum: 1;
+                                                maximum: 90;
+                                                value <=> draft-camera-strength;
+                                                describe(d) => { setting-desc = d; }
+                                            }
+                                            SettingRow {
+                                                label: str-studio-frame;
+                                                description: desc-effects-frame;
+                                                describe(d) => { setting-desc = d; }
+                                                ComboBox {
+                                                    width: 240px;
+                                                    height: 34px;
+                                                    model: frame-options;
+                                                    current-index <=> draft-social-preset;
+                                                    selected(v) => { setting-desc = desc-effects-frame; }
+                                                }
+                                            }
+
+                                            FileField {
+                                                label: str-studio-audio;
+                                                placeholder: str-studio-audio-placeholder;
+                                                button-label: str-browse;
+                                                clear-label: str-clear-field;
+                                                value <=> draft-audio-path;
+                                                edited(t) => { setting-desc = desc-effects-audio; }
+                                                browse => { browse-audio(); }
+                                            }
+                                        }
+
+                                        // Appearance
+                                        if settings-tab == 5 : VerticalLayout {
+                                            spacing: 2px;
+
+                                            font-size-setting := NumberSetting {
+                                                label: str-font-size;
+                                                description: desc-font-size;
+                                                minimum: 8;
+                                                // Capped: header, console bar and fields use
+                                                // fixed heights that clip above ~20px.
+                                                maximum: 20;
+                                                value <=> font-size;
+                                                describe(d) => { setting-desc = d; }
+                                            }
+
+                                            SettingRow {
+                                                label: str-accent-color;
+                                                description: desc-accent-color;
+                                                describe(d) => { setting-desc = d; }
+                                                Rectangle {
+                                                    width: 30px;
+                                                    height: 30px;
+                                                    border-radius: 7px;
+                                                    background: accent-swatch;
+                                                    border-width: 1px;
+                                                    border-color: Theme.border-strong;
+                                                }
+                                                Rectangle {
+                                                    width: 140px;
+                                                    height: 34px;
+                                                    LineEdit {
+                                                        width: 100%;
+                                                        height: 100%;
+                                                        text <=> draft-accent-color;
+                                                        edited(t) => {
+                                                            accent-color-changed(t);
+                                                            setting-desc = desc-accent-color;
+                                                        }
+                                                    }
+                                                    if accent-invalid : Rectangle {
+                                                        border-width: 1px;
+                                                        border-radius: 6px;
+                                                        border-color: Theme.danger;
+                                                        background: transparent;
+                                                    }
+                                                }
+                                            }
+
+                                            SettingRow {
+                                                label: str-hover-color;
+                                                description: desc-hover-color;
+                                                describe(d) => { setting-desc = d; }
+                                                Rectangle {
+                                                    width: 30px;
+                                                    height: 30px;
+                                                    border-radius: 7px;
+                                                    background: hover-swatch;
+                                                    border-width: 1px;
+                                                    border-color: Theme.border-strong;
+                                                }
+                                                Rectangle {
+                                                    width: 140px;
+                                                    height: 34px;
+                                                    LineEdit {
+                                                        width: 100%;
+                                                        height: 100%;
+                                                        text <=> draft-hover-color;
+                                                        edited(t) => {
+                                                            hover-color-changed(t);
+                                                            setting-desc = desc-hover-color;
+                                                        }
+                                                    }
+                                                    if hover-invalid : Rectangle {
+                                                        border-width: 1px;
+                                                        border-radius: 6px;
+                                                        border-color: Theme.danger;
+                                                        background: transparent;
+                                                    }
+                                                }
+                                            }
+
+                                            Rectangle { height: 6px; }
+                                            Rectangle {
+                                                min-height: 54px;
+                                                border-radius: 8px;
+                                                background: Theme.accent-faint;
+                                                border-width: 1px;
+                                                border-color: Theme.accent-soft-border;
+
+                                                HorizontalLayout {
+                                                    padding-left: 12px;
+                                                    padding-right: 12px;
+                                                    padding-top: 8px;
+                                                    padding-bottom: 8px;
+                                                    spacing: 9px;
+                                                    Icon {
+                                                        source: Icons.info;
+                                                        icon-size: 15px;
+                                                        tint: Theme.accent;
+                                                        y: (parent.height - self.height) / 2;
+                                                    }
+                                                    Text {
+                                                        text: str-appearance-hint;
+                                                        color: Theme.text2;
+                                                        font-size: 0.875rem;
+                                                        wrap: word-wrap;
+                                                        horizontal-stretch: 1;
+                                                        vertical-stretch: 1;
+                                                        vertical-alignment: center;
+                                                    }
+                                                }
+                                            }
+
+                                        }
+                                    }
+                                }
+
+                                // Description footer
+                                Rectangle {
+                                    height: 36px;
+                                    border-radius: 7px;
+                                    background: Theme.input;
+                                    border-width: 1px;
+                                    border-color: Theme.border;
+
+                                    HorizontalLayout {
+                                        padding-left: 10px;
+                                        padding-right: 10px;
+                                        spacing: 8px;
+                                        alignment: center;
+
+                                        Icon {
+                                            source: Icons.info;
+                                            icon-size: 14px;
+                                            tint: Theme.accent;
+                                        }
+                                        Text {
+                                            text: setting-desc;
+                                            color: Theme.text3;
+                                            font-size: 0.875rem;
+                                            vertical-alignment: center;
+                                            wrap: word-wrap;
+                                            horizontal-stretch: 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: Theme.border; }
+
+                    // Dialog footer
+                    Rectangle {
+                        height: 46px;
+                        background: #111a2e;
+
+                        HorizontalLayout {
+                            padding-left: 14px;
+                            padding-right: 12px;
+                            padding-top: 10px;
+                            padding-bottom: 10px;
+                            spacing: 8px;
+
+                            Rectangle { horizontal-stretch: 1; }
+
+                            settings-cancel-btn := ActionButton {
+                                width: 88px;
+                                control-height: 34px;
+                                label: str-cancel;
+                                activated => { cancel-settings(); }
+                            }
+                            settings-ok-btn := ActionButton {
+                                width: 88px;
+                                control-height: 34px;
+                                primary: true;
+                                label: str-ok;
+                                activated => { save-settings(); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

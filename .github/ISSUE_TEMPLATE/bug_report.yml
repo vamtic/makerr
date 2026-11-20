@@ -1,0 +1,115 @@
+name: 🐛 Bug report
+description: Report something that is broken or behaves unexpectedly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill in as much as
+        you can — logs and exact reproduction steps make fixes much faster.
+        For questions and ideas, use [Discussions](https://github.com/vamtic/makerr/discussions).
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true
+        - label: I am running the latest release or current `master`
+          required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the problem.
+      placeholder: The render stops at day 3 with "HTTP 429" and the video is incomplete.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps (or the exact CLI command / template) that trigger the issue.
+      placeholder: |
+        1. Open the GUI and select canvas X
+        2. Set region -128_-128 .. 128_128
+        3. Click Create
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - GUI (timelapse, no arguments)
+        - CLI (timelapse <subcommand>)
+        - Core engine (download/compose/pipeline)
+        - Tile cache
+        - Video encoding / ffmpeg
+        - Build / CI / packaging
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - Windows
+        - macOS
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Release tag, or the output of `git rev-parse --short HEAD`.
+      placeholder: "2.0.0 / 2f41cda"
+    validations:
+      required: true
+
+  - type: input
+    id: rust-version
+    attributes:
+      label: Rust version
+      description: Output of `rustc --version` (if building from source).
+      placeholder: "rustc 1.100.0"
+
+  - type: checkboxes
+    id: ffmpeg
+    attributes:
+      label: Environment
+      options:
+        - label: "`ffmpeg` is installed and reachable on `PATH`"
+          required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Paste the CLI output or GUI console log. Please use a code block.
+      render: shell
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that might help (server/domain used, settings.json, network setup…).

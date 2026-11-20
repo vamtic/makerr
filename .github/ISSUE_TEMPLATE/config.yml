@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions & ideas — Discussions
+    url: https://github.com/vamtic/makerr/discussions
+    about: Ask questions, share timelapses, and discuss ideas before opening an issue.
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/vamtic/makerr/security/advisories/new
+    about: Please report security issues privately, never in a public issue.
+  - name: 📖 Documentation
+    url: https://github.com/vamtic/makerr#readme
+    about: Build instructions, CLI reference and configuration options.

@@ -1,0 +1,13 @@
+# Default owner for everything in the repository.
+*       @vamtic
+
+# CI, issue forms, automation.
+/.github/ @vamtic
+
+# Engine, CLI and GUI sources.
+/crates/ @vamtic
+
+# User-facing documentation.
+/README.md @vamtic
+/CONTRIBUTING.md @vamtic
+/SECURITY.md @vamtic

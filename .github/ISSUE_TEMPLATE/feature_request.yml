@@ -1,0 +1,62 @@
+name: ✨ Feature request
+description: Suggest a new feature or an improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion! For open-ended ideas and brainstorming,
+        [Discussions](https://github.com/vamtic/makerr/discussions) is usually
+        a better starting point.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and discussions and this is not a duplicate
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the pain point or limitation you are running into.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: A clear and concise description of what you want to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds or other approaches you thought about.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Area
+      options:
+        - GUI (timelapse, no arguments)
+        - CLI (timelapse <subcommand>)
+        - Core engine (download/compose/pipeline)
+        - Tile cache
+        - Video encoding / Studio FX
+        - Documentation / packaging
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Mockups, links, example videos, or references to how V1 did it.
