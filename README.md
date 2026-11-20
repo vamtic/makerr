@@ -184,7 +184,12 @@ V2 replaces the Python application with a single native binary, but it keeps
 reading the old data:
 
 - On first launch, a V1 `settings.json` next to the old script/executable is
-  imported into `maker/settings.json`. The original file is left untouched.
+  imported into the V2 config file. The original file is left untouched.
+- The V2 config file lives in the per-user config folder
+  (`%APPDATA%\TimelapseMaker\settings.json` on Windows,
+  `~/.config/TimelapseMaker/settings.json` on Linux). A portable
+  `maker/settings.json` in the working directory is used instead when it
+  already exists, so extracted portable builds keep working.
 - V1 template JSON files load as-is.
 - V2 keeps downloaded tiles in the packed `cache.redb` store; there is no V1
   tile cache to migrate.
@@ -307,8 +312,12 @@ timelapse cache-stats | clear-cache | prune-cache --days 7
 
 ## Configuration
 
-`maker/settings.json` is written on first run and every time settings are
-saved. The schema stays compatible with V1, and a V1 `settings.json` is
+The settings file lives in the per-user config folder
+(`%APPDATA%\TimelapseMaker\settings.json` on Windows,
+`~/.config/TimelapseMaker/settings.json` on Linux) and is written on first run
+and every time settings are saved. A portable `maker/settings.json` in the
+working directory takes precedence when it already exists, and `--settings`
+overrides both. The schema stays compatible with V1, and a V1 `settings.json` is
 imported automatically when the V2 file does not exist yet.
 
 ### Settings reference

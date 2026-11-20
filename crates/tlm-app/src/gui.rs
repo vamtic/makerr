@@ -520,9 +520,9 @@ impl AppState {
         let today = chrono::Local::now().date_naive();
         let start_date = today - chrono::Duration::days(7);
         let end_date = today;
-        let output_folder = std::env::current_dir()
-            .map(|d| d.join("maker/timelapse").to_string_lossy().into_owned())
-            .unwrap_or_else(|_| "maker/timelapse".into());
+        let output_folder = settings::default_output_folder()
+            .to_string_lossy()
+            .into_owned();
 
         let _ = net_tx.send(NetCmd::FetchCanvasList(settings.clone()));
         // Prune once at startup (off the UI thread) and fetch the size for the

@@ -32,7 +32,7 @@ struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
 
-    /// Path to maker/settings.json (CLI commands only)
+    /// Path to settings.json (default: per-user config folder, or ./maker/settings.json when present)
     #[arg(long, global = true)]
     settings: Option<PathBuf>,
 }

@@ -85,13 +85,15 @@ impl AsyncStreamEncoder {
         let frame_bytes = config.frame_bytes();
         let output_path = config.output_path.clone();
 
-        let mut child = tokio::process::Command::new(&ffmpeg)
-            .args(&args)
+        let mut cmd = tokio::process::Command::new(&ffmpeg);
+        cmd.args(&args)
             .env("APPIMAGE_EXTRACT_AND_RUN", "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .kill_on_drop(true)
+            .kill_on_drop(true);
+        crate::sys::hide_console_window_async(&mut cmd);
+        let mut child = cmd
             .spawn()
             .map_err(|_| CompileError::Fatal(crate::i18n::tf("ffmpeg_start_error", &[])))?;
 

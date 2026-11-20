@@ -5,7 +5,7 @@
 //! tolerated on load, and [`Settings::load_or_import`] imports a V1 file on
 //! first launch.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -286,11 +286,50 @@ pub fn preset_storage_for_domain(domain: &str) -> Option<&'static str> {
         .map(|(_, _, storage)| *storage)
 }
 
+/// Directory holding the V2 settings file.
+///
+/// A portable `maker/settings.json` in the working directory wins, so an
+/// extracted portable build keeps its configuration beside the binary. Fresh
+/// installs use the per-user config directory instead: the install location
+/// (`Program Files`) is read-only, which made every save fail silently.
+pub fn default_settings_dir() -> PathBuf {
+    pick_settings_dir(
+        Path::new("maker").join("settings.json").exists(),
+        dirs::config_dir().as_deref(),
+    )
+}
+
+fn pick_settings_dir(portable_settings_exists: bool, config_dir: Option<&Path>) -> PathBuf {
+    if portable_settings_exists {
+        return PathBuf::from("maker");
+    }
+    match config_dir {
+        Some(base) => base.join("TimelapseMaker"),
+        None => PathBuf::from("maker"),
+    }
+}
+
 /// The default settings path used by both the CLI and the GUI.
-pub fn default_settings_path() -> std::path::PathBuf {
-    // `maker/settings.json` in the working directory, so both front-ends can
-    // share one config.
-    std::path::PathBuf::from("maker/settings.json")
+pub fn default_settings_path() -> PathBuf {
+    default_settings_dir().join("settings.json")
+}
+
+/// Where a GUI run writes its videos unless the user picks a folder.
+///
+/// The working directory is a poor default: a double-clicked Windows binary
+/// starts in the install directory, which may be read-only. Prefer the user's
+/// Videos folder (Documents as a fallback), grouped under `TimelapseMaker`.
+pub fn default_output_folder() -> PathBuf {
+    pick_output_dir(dirs::video_dir().or_else(dirs::document_dir).as_deref())
+}
+
+fn pick_output_dir(user_dir: Option<&Path>) -> PathBuf {
+    match user_dir {
+        Some(base) => base.join("TimelapseMaker"),
+        None => std::env::current_dir()
+            .map(|dir| dir.join("maker").join("timelapse"))
+            .unwrap_or_else(|_| PathBuf::from("maker").join("timelapse")),
+    }
 }
 
 /// Candidate locations of a V1 `settings.json`. V1 kept the file next to the
@@ -308,6 +347,15 @@ fn legacy_settings_paths(path: &Path) -> Vec<std::path::PathBuf> {
             if let Some(root) = maker_dir.parent() {
                 candidates.push(root.join("settings.json"));
             }
+        }
+    }
+
+    // V1 kept `settings.json` next to the script/executable, i.e. the working
+    // directory for a checkout or a portable folder.
+    if let Ok(cwd) = std::env::current_dir() {
+        let v1 = cwd.join("settings.json");
+        if !candidates.contains(&v1) {
+            candidates.push(v1);
         }
     }
 
@@ -963,5 +1011,44 @@ mod tests {
             Some("storage.gs-os.com")
         );
         assert_eq!(preset_storage_for_domain("custom.example.com"), None);
+    }
+
+    #[test]
+    fn settings_dir_prefers_a_portable_install() {
+        let config = Path::new("/home/u/.config");
+        assert_eq!(
+            pick_settings_dir(true, Some(config)),
+            PathBuf::from("maker")
+        );
+        assert_eq!(
+            pick_settings_dir(false, Some(config)),
+            config.join("TimelapseMaker")
+        );
+        assert_eq!(pick_settings_dir(false, None), PathBuf::from("maker"));
+    }
+
+    #[test]
+    fn output_dir_prefers_the_videos_folder() {
+        let videos = Path::new("/home/u/Videos");
+        assert_eq!(pick_output_dir(Some(videos)), videos.join("TimelapseMaker"));
+
+        let fallback = pick_output_dir(None);
+        assert_eq!(
+            fallback.file_name(),
+            Some(std::ffi::OsStr::new("timelapse"))
+        );
+        assert_eq!(
+            fallback.parent().and_then(Path::file_name),
+            Some(std::ffi::OsStr::new("maker"))
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_paths_never_mix_separators() {
+        let settings = default_settings_path().to_string_lossy().into_owned();
+        assert!(!settings.contains('/'), "{settings}");
+        let output = default_output_folder().to_string_lossy().into_owned();
+        assert!(!output.contains('/'), "{output}");
     }
 }

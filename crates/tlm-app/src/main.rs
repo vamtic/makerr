@@ -22,6 +22,14 @@ fn main() {
         std::process::exit(code);
     }
 
+    // The binary keeps the console subsystem so CLI output, exit codes and
+    // piping work from a terminal. A GUI started by Explorer would otherwise
+    // keep an empty console window open for its whole lifetime; detach it
+    // before the window appears. `FreeConsole` only affects this process, so an
+    // existing shell window stays open.
+    #[cfg(windows)]
+    detach_console();
+
     if !display_available() {
         eprintln!(
             "timelapse: no graphical session found (DISPLAY / WAYLAND_DISPLAY are unset).\n\
@@ -43,4 +51,16 @@ fn display_available() -> bool {
         return true;
     }
     std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some()
+}
+
+/// Detaches the process from the console allocated at startup, closing the
+/// empty console window that a double-clicked console-subsystem binary gets.
+#[cfg(windows)]
+fn detach_console() {
+    use windows_sys::Win32::System::Console::FreeConsole;
+    // SAFETY: `FreeConsole` has no preconditions and merely detaches this
+    // process; failure (already detached) is harmless.
+    unsafe {
+        FreeConsole();
+    }
 }

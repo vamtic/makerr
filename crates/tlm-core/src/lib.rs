@@ -28,6 +28,7 @@ pub mod simd;
 pub mod site;
 pub mod stream;
 pub mod studio;
+pub mod sys;
 pub mod template;
 pub mod tileurl;
 pub mod video;

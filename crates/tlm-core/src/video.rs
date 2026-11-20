@@ -184,10 +184,10 @@ fn detect_hardware_encoder_uncached() -> &'static str {
 fn dxdiag_encoder_hint(dir: &Path) -> Option<&'static str> {
     let _ = std::fs::create_dir_all(dir);
     let out_file = dir.join(format!("dxdiag_tlm_{}.txt", std::process::id()));
-    let _ = std::process::Command::new("dxdiag")
-        .args(["/t"])
-        .arg(&out_file)
-        .status();
+    let mut cmd = std::process::Command::new("dxdiag");
+    cmd.args(["/t"]).arg(&out_file);
+    crate::sys::hide_console_window(&mut cmd);
+    let _ = cmd.status();
     let text = std::fs::read_to_string(&out_file).ok();
     let _ = std::fs::remove_file(&out_file);
 
@@ -216,14 +216,13 @@ fn run_probe(program: &str, args: &[&str], timeout_ms: u64) -> bool {
     let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let ok = std::process::Command::new(&program)
-            .args(&args)
+        let mut cmd = std::process::Command::new(&program);
+        cmd.args(&args)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
+            .stderr(Stdio::null());
+        crate::sys::hide_console_window(&mut cmd);
+        let ok = cmd.status().map(|s| s.success()).unwrap_or(false);
         let _ = tx.send(ok);
     });
     rx.recv_timeout(std::time::Duration::from_millis(timeout_ms))
@@ -235,9 +234,10 @@ fn probe_output(program: &str, args: &[&str], timeout_ms: u64) -> Option<String>
     let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let out = std::process::Command::new(&program)
-            .args(&args)
-            .stdin(Stdio::null())
+        let mut cmd = std::process::Command::new(&program);
+        cmd.args(&args).stdin(Stdio::null());
+        crate::sys::hide_console_window(&mut cmd);
+        let out = cmd
             .output()
             .ok()
             .map(|o| String::from_utf8_lossy(&o.stdout).to_string());
@@ -432,6 +432,7 @@ fn run_size_probe(plan: &EncoderPlan, width: u32, height: u32) -> bool {
     cmd.stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null());
+    crate::sys::hide_console_window(&mut cmd);
 
     let Ok(mut child) = cmd.spawn() else {
         return false;
@@ -585,7 +586,7 @@ pub async fn compile(
         .ok();
 
     let format = settings.output_format;
-    let abs_out_dir = std::fs::canonicalize(out_dir).unwrap_or_else(|_| out_dir.to_path_buf());
+    let abs_out_dir = std::path::absolute(out_dir).unwrap_or_else(|_| out_dir.to_path_buf());
     let out_path = abs_out_dir.join(format!("timelapse.{}", format.extension()));
 
     let mut plan = select_encoder(settings);
@@ -593,14 +594,16 @@ pub async fn compile(
     loop {
         let args = build_ffmpeg_args(&plan, settings, &out_path);
 
-        let mut child = tokio::process::Command::new(&ffmpeg)
-            .args(&args)
+        let mut cmd = tokio::process::Command::new(&ffmpeg);
+        cmd.args(&args)
             .current_dir(out_dir)
             .env("APPIMAGE_EXTRACT_AND_RUN", "1")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .kill_on_drop(true)
+            .kill_on_drop(true);
+        crate::sys::hide_console_window_async(&mut cmd);
+        let mut child = cmd
             .spawn()
             .map_err(|_| CompileError::Fatal(tf("ffmpeg_start_error", &[])))?;
 
