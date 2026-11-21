@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=TimelapseMaker
+GenericName=Timelapse Maker
+Comment=Turn the history of a pixel-art canvas into a timelapse video
+Exec=timelapse
+TryExec=timelapse
+Icon=timelapsemaker
+Terminal=false
+Categories=AudioVideo;Video;
+Keywords=timelapse;video;canvas;pixelart;makerr;
+StartupNotify=true
+StartupWMClass=timelapsemaker

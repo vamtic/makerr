@@ -149,11 +149,19 @@ and every release also ships a `SHA256SUMS` file.
 ```sh
 # Linux
 tar -xzf TimelapseMaker-linux-x86_64.tar.gz
-./timelapse
+./install.sh    # binary, menu entry and icon into ~/.local
+timelapse
 
 # Windows
 # Run TimelapseMaker-Setup.exe, or extract the portable zip and start timelapse.exe
 ```
+
+Running `./timelapse` straight from the extracted folder works too, but on
+Wayland (KDE Plasma, GNOME) the title bar and the taskbar take the app icon
+from an installed `.desktop` entry rather than from the window itself, so
+without `install.sh` they show a generic icon. `install.sh` copies the binary
+to `~/.local/bin`, the entry to `~/.local/share/applications` and the icon
+sizes to `~/.local/share/icons/hicolor`; X11 sessions show the icon either way.
 
 ### Build from source
 
@@ -169,6 +177,9 @@ The build produces a single binary in `target/release/`:
 | Binary | Purpose |
 |---|---|
 | `timelapse` | The application: the desktop GUI when started without arguments, the headless CLI for every subcommand |
+
+On Linux, `packaging/linux/install.sh target/release/timelapse` installs that
+binary together with the desktop entry and the icon sizes for the current user.
 
 Run the tests:
 

@@ -173,8 +173,8 @@ jobs:
       if: runner.os == 'Linux'
       uses: awalsh128/cache-apt-pkgs-action@v1
       with:
-        packages: libxkbcommon-dev libxkbcommon-x11-dev libgl1-mesa-dev libegl1-mesa-dev libwayland-dev libfontconfig1-dev
-        version: 1.0
+        packages: libxkbcommon-dev libxkbcommon-x11-dev libgl1-mesa-dev libegl1-mesa-dev libwayland-dev libfontconfig1-dev desktop-file-utils
+        version: 1.1
 
     - name: Build
       run: cargo build --release --workspace --exclude image --locked
@@ -271,14 +271,21 @@ jobs:
     - name: Package Linux binaries
       if: runner.os == 'Linux'
       run: |
+        # The .desktop entry, the hicolor icons and install.sh are what put the
+        # logo into the title bar and the taskbar on Wayland, where the
+        # compositor ignores the icon the window itself declares.
+        desktop-file-validate packaging/linux/timelapsemaker.desktop
         mkdir -p stage dist stage/LICENSES
         cp target/release/timelapse stage/
+        cp packaging/linux/timelapsemaker.desktop stage/
+        cp packaging/linux/install.sh stage/
+        cp -r packaging/linux/icons stage/
         cp README.md stage/
         cp LICENSE stage/
         cp THIRD_PARTY_NOTICES.md stage/
         cp LICENSES/Slint-Royalty-free-2.0.md stage/LICENSES/
-        tar -czf dist/TimelapseMaker-linux-x86_64.tar.gz -C stage timelapse README.md LICENSE THIRD_PARTY_NOTICES.md LICENSES
-        (cd stage && zip -r ../dist/TimelapseMaker-linux-x86_64.zip timelapse README.md LICENSE THIRD_PARTY_NOTICES.md LICENSES)
+        tar -czf dist/TimelapseMaker-linux-x86_64.tar.gz -C stage timelapse install.sh timelapsemaker.desktop icons README.md LICENSE THIRD_PARTY_NOTICES.md LICENSES
+        (cd stage && zip -r ../dist/TimelapseMaker-linux-x86_64.zip timelapse install.sh timelapsemaker.desktop icons README.md LICENSE THIRD_PARTY_NOTICES.md LICENSES)
 
     - name: Upload packaged artifacts
       uses: actions/upload-artifact@v7

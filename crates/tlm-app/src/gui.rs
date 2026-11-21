@@ -1692,9 +1692,27 @@ fn notify_completion(settings: &Settings, body: &str) {
 // Main function
 // ----------------------------------------------------------------------------
 
+/// Desktop-entry id shared with the Linux packaging (`packaging/linux`).
+///
+/// Wayland compositors ignore the icon a client sets on its window: the title
+/// bar and the taskbar take it from the `.desktop` file whose name matches the
+/// window's app id. Publishing the id here lets an installed entry (and the
+/// icon it names) win over the generic fallback. On X11 the same value becomes
+/// `WM_CLASS`, which is what window grouping and `StartupWMClass` match on.
+const XDG_APP_ID: &str = "timelapsemaker";
+
 /// Starts the Slint GUI on the calling (main) thread; returns once the window
 /// is closed.
 pub fn run() -> Result<(), slint::PlatformError> {
+    // The id can only be stored once a platform exists, and it has to be set
+    // before the first window: the backend hands it to the compositor while it
+    // creates the surface. A missing platform only means there is no XDG
+    // desktop to talk to, so a failure here stays non-fatal.
+    slint::BackendSelector::new().select()?;
+    if let Err(err) = slint::set_xdg_app_id(XDG_APP_ID) {
+        eprintln!("timelapse: could not set the XDG application id: {err}");
+    }
+
     let (net_tx, net_rx) = std::sync::mpsc::channel::<NetCmd>();
     let (preview_tx, preview_rx) = tokio::sync::mpsc::unbounded_channel::<PreviewCmd>();
     let (cache_tx, cache_rx) = std::sync::mpsc::channel::<CacheCmd>();
