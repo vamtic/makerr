@@ -2614,7 +2614,7 @@ mod tests {
             2
         );
         assert_eq!(
-            preset_index_for("pxuniverse.fun", "pxuniverse.fun/backupdata"),
+            preset_index_for("pixuniverse.fun", "pixuniverse.fun/backupdata"),
             3
         );
         // Custom

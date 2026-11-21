@@ -84,8 +84,8 @@ mod tests {
     #[test]
     fn pxu_base_frame() {
         assert_eq!(
-            build("pxuniverse.fun/backupdata", "0", "20000103", "", 132, 124),
-            "https://pxuniverse.fun/backupdata/2000/01/03/0/tiles/132/124.png"
+            build("pixuniverse.fun/backupdata", "0", "20000103", "", 132, 124),
+            "https://pixuniverse.fun/backupdata/2000/01/03/0/tiles/132/124.png"
         );
     }
 

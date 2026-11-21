@@ -270,7 +270,7 @@ pub const PRESETS: &[(&str, &str, &str)] = &[
     ("PPF", "pixelplanet.fun", "storage.gs-os.com"),
     ("PixelYa", "pixelya.fun", "storage.pixelya.fun/history"),
     ("PixMap", "pixmap.fun", "pixmap.fun/history/chunk"),
-    ("PXU", "pxuniverse.fun", "pxuniverse.fun/backupdata"),
+    ("PXU", "pixuniverse.fun", "pixuniverse.fun/backupdata"),
 ];
 
 /// The storage base belonging to a preset domain, if `domain` names one.
@@ -385,7 +385,7 @@ const LEGACY_DEFAULT_USER_AGENTS: [&str; 3] = [
 ];
 
 /// Schema version used to migrate settings written by older releases.
-const SETTINGS_VERSION: u32 = 3;
+const SETTINGS_VERSION: u32 = 4;
 
 fn old_settings_version() -> u32 {
     0
@@ -659,6 +659,20 @@ impl Settings {
             self.user_agent = DEFAULT_USER_AGENT.into();
         }
 
+        if version < 4 {
+            // pxuniverse.fun redirects every path to https://pixuniverse.fun/
+            // and drops it, so old PXU configs request 404s.
+            if self.domain.eq_ignore_ascii_case("pxuniverse.fun") {
+                self.domain = "pixuniverse.fun".into();
+            }
+            if self
+                .storage_domain
+                .eq_ignore_ascii_case("pxuniverse.fun/backupdata")
+            {
+                self.storage_domain = "pixuniverse.fun/backupdata".into();
+            }
+        }
+
         self.settings_version = SETTINGS_VERSION;
     }
 
@@ -798,6 +812,30 @@ mod tests {
         s.save_png_sequence = false;
         s.migrate();
         assert!(!s.save_png_sequence);
+    }
+
+    #[test]
+    fn migrates_the_old_pxu_domain() {
+        // The old PXU preset points at pxuniverse.fun, which redirects every
+        // path to the pixuniverse.fun root and drops it.
+        let old = r#"{
+            "settings_version": 3,
+            "domain": "pxuniverse.fun",
+            "storage_domain": "pxuniverse.fun/backupdata"
+        }"#;
+        let s = Settings::from_bytes(old.as_bytes());
+        assert_eq!(s.domain, "pixuniverse.fun");
+        assert_eq!(s.storage_domain, "pixuniverse.fun/backupdata");
+
+        // Any other site is left alone.
+        let custom = r#"{
+            "settings_version": 3,
+            "domain": "custom.example.com",
+            "storage_domain": "custom.example.com/tiles"
+        }"#;
+        let s = Settings::from_bytes(custom.as_bytes());
+        assert_eq!(s.domain, "custom.example.com");
+        assert_eq!(s.storage_domain, "custom.example.com/tiles");
     }
 
     #[test]
@@ -996,7 +1034,7 @@ mod tests {
         );
         assert_eq!(
             PRESETS[3],
-            ("PXU", "pxuniverse.fun", "pxuniverse.fun/backupdata")
+            ("PXU", "pixuniverse.fun", "pixuniverse.fun/backupdata")
         );
     }
 

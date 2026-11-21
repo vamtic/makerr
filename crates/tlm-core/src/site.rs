@@ -111,7 +111,7 @@ mod tests {
         assert!(uses_canvases_api("pixelplanet.fun"));
         assert!(uses_canvases_api("pixmap.fun"));
         assert!(!uses_canvases_api("pixelya.fun"));
-        assert!(!uses_canvases_api("pxuniverse.fun"));
+        assert!(!uses_canvases_api("pixuniverse.fun"));
         assert!(!uses_canvases_api("custom.example.com"));
     }
 
@@ -162,7 +162,7 @@ mod tests {
         assert!(canvas_size_in_chunks("pixmap.fun"));
         assert!(!canvas_size_in_chunks("pixelplanet.fun"));
         assert!(!canvas_size_in_chunks("pixelya.fun"));
-        assert!(!canvas_size_in_chunks("pxuniverse.fun"));
+        assert!(!canvas_size_in_chunks("pixuniverse.fun"));
     }
 
     #[test]
@@ -181,7 +181,7 @@ mod tests {
     fn non_pixmap_canvas_size_stays_in_pixels() {
         assert_eq!(canvas_size_pixels("pixelplanet.fun", 256), 256);
         assert_eq!(canvas_size_pixels("pixelya.fun", 1024), 1024);
-        assert_eq!(canvas_size_pixels("pxuniverse.fun", 8192), 8192);
+        assert_eq!(canvas_size_pixels("pixuniverse.fun", 8192), 8192);
         assert_eq!(canvas_size_pixels("custom.example.com", 64), 64);
     }
 
