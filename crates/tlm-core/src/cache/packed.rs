@@ -124,7 +124,9 @@ impl PackedCache {
         let Ok(table) = read.open_table(META) else {
             return false;
         };
-        table.get(MIGRATED_KEY).ok().flatten().is_some()
+        let migrated = table.get(MIGRATED_KEY).is_ok_and(|guard| guard.is_some());
+        drop(table);
+        migrated
     }
 
     fn mark_migrated(&self) {
