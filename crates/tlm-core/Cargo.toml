@@ -19,7 +19,7 @@ rayon.workspace = true
 thiserror.workspace = true
 dirs.workspace = true
 futures.workspace = true
-redb = "4"
+redb = "5"
 zune-png = "0.5"
 
 [dev-dependencies]
