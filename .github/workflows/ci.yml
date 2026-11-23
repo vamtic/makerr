@@ -43,7 +43,7 @@ jobs:
     - uses: actions/checkout@v7
 
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@1.100.0
+      uses: dtolnay/rust-toolchain@1.120.0
       with:
         components: rustfmt
 
@@ -58,7 +58,7 @@ jobs:
     - uses: actions/checkout@v7
 
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@1.100.0
+      uses: dtolnay/rust-toolchain@1.120.0
       with:
         components: clippy
 
@@ -96,7 +96,7 @@ jobs:
     - uses: actions/checkout@v7
 
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@1.100.0
+      uses: dtolnay/rust-toolchain@1.120.0
 
     - name: Rust cache
       uses: swatinem/rust-cache@v2
@@ -123,7 +123,7 @@ jobs:
     - uses: actions/checkout@v7
 
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@1.100.0
+      uses: dtolnay/rust-toolchain@1.120.0
 
     - name: Rust cache
       uses: swatinem/rust-cache@v2
@@ -159,7 +159,7 @@ jobs:
     - uses: actions/checkout@v7
 
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@1.100.0
+      uses: dtolnay/rust-toolchain@1.120.0
 
     # A separate key from the `check` job: that one holds debug artifacts,
     # this one holds the release build (the expensive part to redo).
